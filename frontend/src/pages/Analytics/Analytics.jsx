@@ -26,7 +26,20 @@ const TABS = [
 
 function Analytics({ token = '' }) {
   const [tab, setTab] = useState('attendance')
-  const [attendance, setAttendance] = useState({ labels: [], trend: [], average: 0, officeLocation: '' })
+  const [attendance, setAttendance] = useState({
+    labels: [],
+    trend: [],
+    daily: [],
+    dailyHours: [],
+    average: 0,
+    averageHours: 0,
+    onTimeRate: 0,
+    lateArrivals: 0,
+    statusDistribution: {},
+    weekdayPattern: [],
+    officeLocation: '',
+    range: { days: 7, from: '', to: '' },
+  })
   const [productivity, setProductivity] = useState({ labels: [], productivity: [], attritionRiskDistribution: {}, employeeRisk: [] })
   const [placement, setPlacement] = useState({ applied: 0, shortlisted: 0, interviewed: 0, offers: 0, leaveSummary: {}, taskSummary: {}, placementStatistics: {} })
   const [error, setError] = useState('')
@@ -37,12 +50,27 @@ function Analytics({ token = '' }) {
     const load = async () => {
       try {
         const [attendanceRes, productivityRes, placementRes] = await Promise.all([
-          getAttendanceAnalytics(token),
+          getAttendanceAnalytics(token, 14),
           getProductivityAnalytics(token),
           getPlacementAnalytics(token),
         ])
         if (!mounted) return
-        setAttendance(attendanceRes?.data || { labels: [], trend: [], average: 0 })
+        setAttendance(
+          attendanceRes?.data || {
+            labels: [],
+            trend: [],
+            daily: [],
+            dailyHours: [],
+            average: 0,
+            averageHours: 0,
+            onTimeRate: 0,
+            lateArrivals: 0,
+            statusDistribution: {},
+            weekdayPattern: [],
+            officeLocation: '',
+            range: { days: 7, from: '', to: '' },
+          }
+        )
         setProductivity(productivityRes?.data || { labels: [], productivity: [], attritionRiskDistribution: {}, employeeRisk: [] })
         setPlacement(placementRes?.data || { applied: 0, shortlisted: 0, interviewed: 0, offers: 0, leaveSummary: {}, taskSummary: {} })
       } catch (err) {
@@ -58,6 +86,33 @@ function Analytics({ token = '' }) {
 
   const attendanceChart = useMemo(
     () => attendance.labels.map((l, i) => ({ label: l, value: attendance.trend[i] || 0 })),
+    [attendance]
+  )
+
+  const attendanceHoursChart = useMemo(() => {
+    if (Array.isArray(attendance.daily) && attendance.daily.length > 0) {
+      return attendance.daily.map((item) => ({
+        label: item.label,
+        value: item.avgWorkedHours || 0,
+      }))
+    }
+    return attendance.labels.map((l, i) => ({ label: l, value: attendance.dailyHours?.[i] || 0 }))
+  }, [attendance])
+
+  const attendanceStatusPie = useMemo(() => {
+    const status = attendance.statusDistribution || {}
+    return [
+      { name: 'Present', value: status.present || 0, color: '#10b981' },
+      { name: 'Half Day', value: status.half_day || 0, color: '#f59e0b' },
+      { name: 'In Progress', value: status.in_progress || 0, color: '#0ea5e9' },
+      { name: 'On Leave', value: status.on_leave || 0, color: '#8b5cf6' },
+      { name: 'Weekend', value: status.weekend || 0, color: '#64748b' },
+      { name: 'Absent', value: status.absent || 0, color: '#ef4444' },
+    ].filter((item) => item.value > 0)
+  }, [attendance])
+
+  const weekdayPatternChart = useMemo(
+    () => (attendance.weekdayPattern || []).map((item) => ({ label: item.label, value: item.value || 0 })),
     [attendance]
   )
 
@@ -119,7 +174,22 @@ function Analytics({ token = '' }) {
             <div className="kpi-card">
               <div className="kpi-label">Average Attendance</div>
               <div className="kpi-value">{attendance.average ?? 0}<span className="kpi-suffix">%</span></div>
-              <div className="kpi-trend">Last 7 days</div>
+              <div className="kpi-trend">Last {attendance.range?.days || 7} days</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Average Worked Hours</div>
+              <div className="kpi-value">{attendance.averageHours ?? 0}<span className="kpi-suffix">h</span></div>
+              <div className="kpi-trend">Per working day</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">On-time Rate</div>
+              <div className="kpi-value">{attendance.onTimeRate ?? 0}<span className="kpi-suffix">%</span></div>
+              <div className="kpi-trend">Check-ins before 09:15</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Late Arrivals</div>
+              <div className="kpi-value">{attendance.lateArrivals ?? 0}</div>
+              <div className="kpi-trend">Within selected range</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-label">Office Location</div>
@@ -127,20 +197,72 @@ function Analytics({ token = '' }) {
               <div className="kpi-trend">Primary site</div>
             </div>
           </div>
-          <div className="chart-card">
-            <div className="chart-card-header">
-              <div className="card-title">Daily Attendance %</div>
-              <div className="card-subtitle">Last 7 days</div>
+          <div className="chart-grid">
+            <div className="chart-card">
+              <div className="chart-card-header">
+                <div className="card-title">Daily Attendance %</div>
+                <div className="card-subtitle">Last {attendance.range?.days || 7} days</div>
+              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={attendanceChart}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--wp-border)" />
+                  <XAxis dataKey="label" />
+                  <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip formatter={(v) => [`${v}%`, 'Attendance']} />
+                  <Bar dataKey="value" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={attendanceChart}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--wp-border)" />
-                <XAxis dataKey="label" />
-                <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                <Tooltip formatter={(v) => [`${v}%`, 'Attendance']} />
-                <Bar dataKey="value" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="chart-card">
+              <div className="chart-card-header">
+                <div className="card-title">Average Worked Hours</div>
+                <div className="card-subtitle">Daily working-time profile</div>
+              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={attendanceHoursChart}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--wp-border)" />
+                  <XAxis dataKey="label" />
+                  <YAxis domain={[0, 12]} />
+                  <Tooltip formatter={(v) => [`${v} h`, 'Worked Hours']} />
+                  <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="chart-grid">
+            <div className="chart-card">
+              <div className="chart-card-header">
+                <div className="card-title">Status Distribution</div>
+                <div className="card-subtitle">Attendance states in selected range</div>
+              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={attendanceStatusPie} dataKey="value" nameKey="name" outerRadius={100} innerRadius={55} paddingAngle={4}>
+                    {attendanceStatusPie.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="chart-card">
+              <div className="chart-card-header">
+                <div className="card-title">Weekday Pattern</div>
+                <div className="card-subtitle">Average attendance by day of week</div>
+              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={weekdayPatternChart}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--wp-border)" />
+                  <XAxis dataKey="label" />
+                  <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip formatter={(v) => [`${v}%`, 'Avg Attendance']} />
+                  <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       )}
