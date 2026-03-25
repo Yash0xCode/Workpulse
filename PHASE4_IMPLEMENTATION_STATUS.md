@@ -87,6 +87,11 @@ Latest verification note (Mar 25, 2026):
 - Attendance status resolution now classifies `present`, `absent`, `half_day`, `on_leave`, `weekend`, and `in_progress`.
 - Added manager-facing endpoints `GET /api/attendance/summary` (extended metrics) and `GET /api/attendance/status` (per-employee status list).
 
+Notification verification note (Mar 25, 2026):
+- In-app notification flows are active for leave submission and approval workflows.
+- Email notification pipeline stub and templates were added for leave events (`leave_pending_approval`, `leave_decision`).
+- Webhook delivery is still pending.
+
 ### P2 - Core Modules (Weeks 8-12)
 - [ ] Payroll System (salary structure, slips, tax)
 - [ ] Recruitment System (job openings, applicants, interviews, offers)

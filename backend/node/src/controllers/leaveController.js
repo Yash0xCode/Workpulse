@@ -3,6 +3,10 @@ import {
   createLeaveWorkflowInstance,
   transitionLeaveWorkflowInstance,
 } from '../services/workflowService.js'
+import {
+  createInAppNotification,
+  sendEmailNotificationStub,
+} from '../services/notificationService.js'
 import { sendError, sendPaginated, sendSuccess } from '../utils/response.js'
 
 const DEFAULT_LEAVE_TYPES = ['casual', 'sick', 'earned', 'unpaid']
@@ -42,39 +46,19 @@ const normalizeLeave = (row) => ({
   endDate: row.endDate ? new Date(row.endDate).toISOString().slice(0, 10) : null,
 })
 
-const createNotification = async ({
+const notifyApproversForLeave = async ({
   organizationId,
-  userId,
-  title,
-  message,
-  type = 'info',
-  resourceType = null,
-  resourceId = null,
+  leaveId,
+  employeeId,
+  employeeName,
+  leaveType,
+  startDate,
+  endDate,
+  requesterUserId,
 }) => {
-  if (!organizationId || !userId || !title || !message) return
-
-  await pool.query(
-    `
-      INSERT INTO notifications (
-        organization_id,
-        user_id,
-        title,
-        message,
-        type,
-        resource_type,
-        resource_id,
-        is_read
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)
-    `,
-    [organizationId, userId, title, message, type, resourceType, resourceId]
-  )
-}
-
-const notifyApproversForLeave = async ({ organizationId, leaveId, employeeId, employeeName, requesterUserId }) => {
   const recipientRows = await pool.query(
     `
-      SELECT DISTINCT u.id AS "userId"
+      SELECT DISTINCT u.id AS "userId", u.email, u.name
       FROM users u
       LEFT JOIN roles r ON r.id = u.role_id
       LEFT JOIN employees mgr ON mgr.id = $3
@@ -90,12 +74,31 @@ const notifyApproversForLeave = async ({ organizationId, leaveId, employeeId, em
 
   await Promise.all(
     recipientRows.rows.map((recipient) =>
-      createNotification({
+      createInAppNotification({
         organizationId,
         userId: recipient.userId,
         title: 'Leave Request Pending Approval',
         message: `${employeeName || 'An employee'} submitted a leave request requiring your review.`,
         type: 'workflow',
+        resourceType: 'leave',
+        resourceId: leaveId,
+      })
+    )
+  )
+
+  await Promise.all(
+    recipientRows.rows.map((recipient) =>
+      sendEmailNotificationStub({
+        organizationId,
+        userId: recipient.userId,
+        recipientEmail: recipient.email,
+        template: 'leave_pending_approval',
+        context: {
+          employeeName,
+          leaveType,
+          startDate,
+          endDate,
+        },
         resourceType: 'leave',
         resourceId: leaveId,
       })
@@ -292,6 +295,9 @@ export const createLeave = async (req, res) => {
       leaveId,
       employeeId: employee.id,
       employeeName: employee.name,
+      leaveType: req.body.leaveType,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
       requesterUserId: employee.userId || req.user.id,
     })
 
@@ -462,7 +468,24 @@ export const updateLeave = async (req, res) => {
       }
 
       const existing = await pool.query(
-        'SELECT id, status, user_id AS "userId", organization_id AS "organizationId", employee_id AS "employeeId" FROM leaves WHERE id = $1 AND organization_id = $2 LIMIT 1',
+        `
+          SELECT
+            l.id,
+            l.status,
+            l.user_id AS "userId",
+            l.organization_id AS "organizationId",
+            l.employee_id AS "employeeId",
+            l.leave_type AS "leaveType",
+            l.from_date AS "startDate",
+            l.to_date AS "endDate",
+            u.email AS "requesterEmail",
+            COALESCE(e.name, u.name) AS "employeeName"
+          FROM leaves l
+          LEFT JOIN users u ON u.id = l.user_id
+          LEFT JOIN employees e ON e.id = l.employee_id
+          WHERE l.id = $1 AND l.organization_id = $2
+          LIMIT 1
+        `,
         [Number(req.params.id), req.user.organizationId]
       )
 
@@ -587,12 +610,29 @@ export const updateLeave = async (req, res) => {
       }
 
       const reviewerLabel = req.user?.fullName || req.user?.email || 'A reviewer'
-      await createNotification({
+      await createInAppNotification({
         organizationId: req.user.organizationId,
         userId: existingLeave.userId,
         title: `Leave ${updatedLeave.status}`,
         message: `${reviewerLabel} marked your leave request as ${updatedLeave.status}.`,
         type: 'workflow',
+        resourceType: 'leave',
+        resourceId: updatedLeave.id,
+      })
+
+      await sendEmailNotificationStub({
+        organizationId: req.user.organizationId,
+        userId: existingLeave.userId,
+        recipientEmail: existingLeave.requesterEmail,
+        template: 'leave_decision',
+        context: {
+          employeeName: existingLeave.employeeName,
+          reviewerName: reviewerLabel,
+          status: updatedLeave.status,
+          leaveType: existingLeave.leaveType,
+          startDate: existingLeave.startDate,
+          endDate: existingLeave.endDate,
+        },
         resourceType: 'leave',
         resourceId: updatedLeave.id,
       })
