@@ -1,0 +1,150 @@
+-- WorkPulse PostgreSQL schema currently used by the live Node backend.
+
+CREATE TABLE IF NOT EXISTS organizations (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  type VARCHAR(50) NOT NULL CHECK (type IN ('corporate', 'education')),
+  location VARCHAR(255),
+  email VARCHAR(255),
+  admin_name VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS roles (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  scope VARCHAR(50) NOT NULL CHECK (scope IN ('corporate', 'education', 'global')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+  id SERIAL PRIMARY KEY,
+  code VARCHAR(120) NOT NULL UNIQUE,
+  description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  permission_id INTEGER NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+  PRIMARY KEY (role_id, permission_id)
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  role_id INTEGER REFERENCES roles(id) ON DELETE SET NULL,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS employees (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  employee_code VARCHAR(50),
+  name VARCHAR(255),
+  email VARCHAR(255),
+  department VARCHAR(120),
+  designation VARCHAR(120),
+  role VARCHAR(120),
+  skills JSONB DEFAULT '[]'::jsonb,
+  joining_date DATE,
+  salary NUMERIC(12,2),
+  manager_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  location VARCHAR(255),
+  status VARCHAR(50) DEFAULT 'Active',
+  phone VARCHAR(50),
+  attendance VARCHAR(50),
+  productivity INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS students (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  roll_no VARCHAR(50),
+  course VARCHAR(120),
+  semester INTEGER,
+  cgpa NUMERIC(3,2),
+  attendance_percent NUMERIC(5,2),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS attendance_logs (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  attendance_date DATE NOT NULL,
+  check_in_time TIMESTAMP,
+  check_out_time TIMESTAMP,
+  status VARCHAR(30) DEFAULT 'present',
+  source VARCHAR(30) DEFAULT 'manual',
+  face_verified BOOLEAN DEFAULT FALSE,
+  location_verified BOOLEAN DEFAULT FALSE,
+  latitude NUMERIC(10,7),
+  longitude NUMERIC(10,7),
+  location_name VARCHAR(255),
+  location_city VARCHAR(255),
+  distance_meters NUMERIC(10,2),
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS leaves (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  leave_type VARCHAR(40) NOT NULL,
+  from_date DATE NOT NULL,
+  to_date DATE NOT NULL,
+  reason TEXT,
+  status VARCHAR(30) DEFAULT 'pending',
+  reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS leave_balances (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE,
+  leave_type VARCHAR(40) NOT NULL,
+  leave_year INTEGER NOT NULL,
+  allocated_days NUMERIC(6,2) DEFAULT 0,
+  carry_forward_days NUMERIC(6,2) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, employee_id, leave_type, leave_year)
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  assigned_to_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  assignee_name VARCHAR(255),
+  assigned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  priority VARCHAR(20) DEFAULT 'Medium',
+  status VARCHAR(30) DEFAULT 'todo',
+  department VARCHAR(120),
+  due_date DATE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS feedback (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  from_user INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  to_user INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  rating INTEGER CHECK (rating BETWEEN 1 AND 5),
+  comments TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
