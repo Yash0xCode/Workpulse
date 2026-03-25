@@ -59,3 +59,38 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user_read
   ON notifications(user_id, is_read, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS notification_webhooks (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  event_type VARCHAR(80) NOT NULL,
+  target_url TEXT NOT NULL,
+  secret TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, event_type, target_url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_webhooks_org_event
+  ON notification_webhooks(organization_id, event_type, is_active);
+
+CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
+  id SERIAL PRIMARY KEY,
+  webhook_id INTEGER REFERENCES notification_webhooks(id) ON DELETE SET NULL,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  event_type VARCHAR(80) NOT NULL,
+  resource_type VARCHAR(80),
+  resource_id INTEGER,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  http_status INTEGER,
+  response_body TEXT,
+  error_message TEXT,
+  attempt_no INTEGER NOT NULL DEFAULT 1,
+  delivered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_webhook_deliveries_org
+  ON notification_webhook_deliveries(organization_id, delivered_at DESC);

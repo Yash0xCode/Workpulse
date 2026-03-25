@@ -6,6 +6,7 @@ import {
 import {
   createInAppNotification,
   sendEmailNotificationStub,
+  sendWebhookNotification,
 } from '../services/notificationService.js'
 import { sendError, sendPaginated, sendSuccess } from '../utils/response.js'
 
@@ -104,6 +105,22 @@ const notifyApproversForLeave = async ({
       })
     )
   )
+
+  await sendWebhookNotification({
+    organizationId,
+    eventType: 'leave_pending_approval',
+    resourceType: 'leave',
+    resourceId: leaveId,
+    payload: {
+      leaveId,
+      employeeId,
+      employeeName,
+      leaveType,
+      startDate,
+      endDate,
+      approverCount: recipientRows.rows.length,
+    },
+  })
 }
 
 const getEmployeeForLeave = async (organizationId, employeeId, userId) => {
@@ -635,6 +652,24 @@ export const updateLeave = async (req, res) => {
         },
         resourceType: 'leave',
         resourceId: updatedLeave.id,
+      })
+
+      await sendWebhookNotification({
+        organizationId: req.user.organizationId,
+        eventType: 'leave_decision',
+        resourceType: 'leave',
+        resourceId: updatedLeave.id,
+        payload: {
+          leaveId: updatedLeave.id,
+          employeeId: existingLeave.employeeId,
+          employeeName: existingLeave.employeeName,
+          leaveType: existingLeave.leaveType,
+          startDate: existingLeave.startDate,
+          endDate: existingLeave.endDate,
+          reviewerName: reviewerLabel,
+          reviewerUserId: req.user.id,
+          status: updatedLeave.status,
+        },
       })
     }
 

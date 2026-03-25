@@ -77,7 +77,7 @@
 
 ### P1 - High Impact (Weeks 4-7)
 - [ ] Workflow Engine (generic, multi-step approval)
-- [ ] Notification System (email, in-app, webhooks)
+- [x] Notification System (email, in-app, webhooks)
 - [ ] Leave Allocation & Balance Tracking
 - [ ] Leave Approval Workflow
 - [x] Attendance Status Calculation
@@ -90,7 +90,8 @@ Latest verification note (Mar 25, 2026):
 Notification verification note (Mar 25, 2026):
 - In-app notification flows are active for leave submission and approval workflows.
 - Email notification pipeline stub and templates were added for leave events (`leave_pending_approval`, `leave_decision`).
-- Webhook delivery is still pending.
+- Webhook configuration, dispatch, and delivery logs are active through `/api/notifications/webhooks` and `/api/notifications/webhook-deliveries`.
+- Live validation confirmed successful webhook deliveries for both leave events (`leave_pending_approval`, `leave_decision`).
 
 Attendance analytics verification note (Mar 25, 2026):
 - Extended `GET /api/analytics/attendance` to include range-based KPIs: average attendance, average worked hours, on-time rate, late arrivals.
