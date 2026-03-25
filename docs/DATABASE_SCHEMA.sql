@@ -122,6 +122,22 @@ CREATE TABLE IF NOT EXISTS leave_balances (
   UNIQUE (organization_id, employee_id, leave_type, leave_year)
 );
 
+CREATE TABLE IF NOT EXISTS employee_face_profiles (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  enrollment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+  embedding_distance NUMERIC(8,4),
+  liveness_score NUMERIC(8,4),
+  verification_confidence NUMERIC(8,4) DEFAULT 0,
+  enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_verified_at TIMESTAMP,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, employee_id)
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
   id SERIAL PRIMARY KEY,
   organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,

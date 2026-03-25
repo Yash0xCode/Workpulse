@@ -63,6 +63,7 @@ const REQUIRED_TABLES = [
 	'attendance_logs',
 	'leaves',
 	'leave_balances',
+	'employee_face_profiles',
 	'tasks',
 	'workflow_definitions',
 	'workflow_instances',
