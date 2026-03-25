@@ -10,13 +10,28 @@ import {
 } from '../services/notificationService.js'
 import { sendError, sendPaginated, sendSuccess } from '../utils/response.js'
 
-const DEFAULT_LEAVE_TYPES = ['casual', 'sick', 'earned', 'unpaid']
+const DEFAULT_LEAVE_POLICY = [
+  { leaveType: 'casual', allocatedDays: 8, maxCarryForwardDays: 2 },
+  { leaveType: 'sick', allocatedDays: 6, maxCarryForwardDays: 3 },
+  { leaveType: 'earned', allocatedDays: 12, maxCarryForwardDays: 5 },
+  { leaveType: 'unpaid', allocatedDays: 0, maxCarryForwardDays: 0 },
+]
+
+let leavePolicyInfrastructureReady = false
 
 const normalizeLeaveType = (value) => String(value || '').trim().toLowerCase()
 
 const toNumber = (value, fallback = 0) => {
   const n = Number(value)
   return Number.isFinite(n) ? n : fallback
+}
+
+const calculateRequestedDays = (startDate, endDate) => {
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0
+  if (end < start) return 0
+  return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1)
 }
 
 const canManageBalances = (role) =>
@@ -171,6 +186,129 @@ const getEmployeeById = async (organizationId, employeeId) => {
   return rows[0] || null
 }
 
+const ensureLeavePolicyInfrastructure = async () => {
+  if (leavePolicyInfrastructureReady) return
+
+  await pool.query(
+    `
+      CREATE TABLE IF NOT EXISTS leave_policies (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        leave_type VARCHAR(40) NOT NULL,
+        allocated_days NUMERIC(6,2) NOT NULL DEFAULT 0,
+        max_carry_forward_days NUMERIC(6,2) NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (organization_id, leave_type)
+      )
+    `
+  )
+
+  await pool.query(
+    `
+      CREATE INDEX IF NOT EXISTS idx_leave_policies_org_active
+      ON leave_policies(organization_id, is_active)
+    `
+  )
+
+  leavePolicyInfrastructureReady = true
+}
+
+const ensureDefaultLeavePolicies = async (organizationId) => {
+  await ensureLeavePolicyInfrastructure()
+
+  const existing = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM leave_policies WHERE organization_id = $1`,
+    [organizationId]
+  )
+
+  if ((existing.rows[0]?.total || 0) > 0) return
+
+  for (const policy of DEFAULT_LEAVE_POLICY) {
+    await pool.query(
+      `
+        INSERT INTO leave_policies (
+          organization_id,
+          leave_type,
+          allocated_days,
+          max_carry_forward_days,
+          is_active
+        )
+        VALUES ($1, $2, $3, $4, TRUE)
+        ON CONFLICT (organization_id, leave_type)
+        DO NOTHING
+      `,
+      [organizationId, policy.leaveType, policy.allocatedDays, policy.maxCarryForwardDays]
+    )
+  }
+}
+
+const getLeavePoliciesForOrganization = async (organizationId) => {
+  await ensureDefaultLeavePolicies(organizationId)
+
+  const { rows } = await pool.query(
+    `
+      SELECT
+        leave_type AS "leaveType",
+        allocated_days AS "allocatedDays",
+        max_carry_forward_days AS "maxCarryForwardDays",
+        is_active AS "isActive"
+      FROM leave_policies
+      WHERE organization_id = $1
+      ORDER BY leave_type ASC
+    `,
+    [organizationId]
+  )
+
+  return rows.map((row) => ({
+    leaveType: normalizeLeaveType(row.leaveType),
+    allocatedDays: toNumber(row.allocatedDays, 0),
+    maxCarryForwardDays: toNumber(row.maxCarryForwardDays, 0),
+    isActive: Boolean(row.isActive),
+  }))
+}
+
+const ensureLeaveBalancesForEmployeeYear = async ({ organizationId, employeeId, year }) => {
+  const policies = await getLeavePoliciesForOrganization(organizationId)
+  const activePolicies = policies.filter((policy) => policy.isActive)
+  if (activePolicies.length === 0) return
+
+  const currentStored = await getStoredLeaveAllocations({ organizationId, employeeId, year })
+  const previousYear = year - 1
+  const previousStored = await getStoredLeaveAllocations({ organizationId, employeeId, year: previousYear })
+  const previousUsage = await getLeaveUsageByType({ organizationId, employeeId, year: previousYear })
+
+  for (const policy of activePolicies) {
+    const leaveType = normalizeLeaveType(policy.leaveType)
+    if (currentStored[leaveType]) continue
+
+    const previousAllocated = previousStored[leaveType]?.allocatedDays || 0
+    const previousCarry = previousStored[leaveType]?.carryForwardDays || 0
+    const previousUsed = previousUsage[leaveType] || 0
+    const previousRemaining = Math.max(0, previousAllocated + previousCarry - previousUsed)
+    const carryForwardDays = Math.min(previousRemaining, Math.max(0, policy.maxCarryForwardDays || 0))
+
+    await pool.query(
+      `
+        INSERT INTO leave_balances (
+          organization_id,
+          employee_id,
+          leave_type,
+          leave_year,
+          allocated_days,
+          carry_forward_days,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+        ON CONFLICT (organization_id, employee_id, leave_type, leave_year)
+        DO NOTHING
+      `,
+      [organizationId, employeeId, leaveType, year, policy.allocatedDays, carryForwardDays]
+    )
+  }
+}
+
 const getLeaveUsageByType = async ({ organizationId, employeeId, year }) => {
   const { startDate, endDate } = getYearRange(year)
   const { rows } = await pool.query(
@@ -220,9 +358,18 @@ const getStoredLeaveAllocations = async ({ organizationId, employeeId, year }) =
 }
 
 const getLeaveBalanceSummary = async ({ organizationId, employeeId, year }) => {
+  await ensureLeaveBalancesForEmployeeYear({ organizationId, employeeId, year })
+
+  const policies = await getLeavePoliciesForOrganization(organizationId)
   const stored = await getStoredLeaveAllocations({ organizationId, employeeId, year })
   const usage = await getLeaveUsageByType({ organizationId, employeeId, year })
-  const leaveTypes = Array.from(new Set([...DEFAULT_LEAVE_TYPES, ...Object.keys(stored), ...Object.keys(usage)]))
+  const leaveTypes = Array.from(
+    new Set([
+      ...policies.filter((policy) => policy.isActive).map((policy) => normalizeLeaveType(policy.leaveType)),
+      ...Object.keys(stored),
+      ...Object.keys(usage),
+    ])
+  )
 
   return leaveTypes.map((leaveType) => {
     const allocatedDays = stored[leaveType]?.allocatedDays || 0
@@ -252,6 +399,10 @@ export const createLeave = async (req, res) => {
   }
 
   try {
+    if (new Date(req.body.endDate) < new Date(req.body.startDate)) {
+      return sendError(res, 'VALIDATION_ERROR', 'endDate must be on or after startDate', {}, 400)
+    }
+
     const employee = await getEmployeeForLeave(
       req.user.organizationId,
       req.body.employeeId,
@@ -264,6 +415,31 @@ export const createLeave = async (req, res) => {
         'VALIDATION_ERROR',
         'leaveType, startDate, endDate and employeeId are required',
         {},
+        400
+      )
+    }
+
+    const leaveYear = new Date(req.body.startDate).getFullYear()
+    const balances = await getLeaveBalanceSummary({
+      organizationId: req.user.organizationId,
+      employeeId: employee.id,
+      year: leaveYear,
+    })
+
+    const normalizedType = normalizeLeaveType(req.body.leaveType)
+    const typeBalance = balances.find((item) => item.leaveType === normalizedType)
+    const requestedDays = calculateRequestedDays(req.body.startDate, req.body.endDate)
+
+    if (!typeBalance || typeBalance.availableDays < requestedDays) {
+      return sendError(
+        res,
+        'VALIDATION_ERROR',
+        'Requested leave exceeds available balance',
+        {
+          leaveType: normalizedType,
+          availableDays: typeBalance?.availableDays || 0,
+          requestedDays,
+        },
         400
       )
     }
@@ -346,6 +522,123 @@ export const getLeaves = async (req, res) => {
     return sendPaginated(res, rows.map(normalizeLeave), page, limit, count.rows[0]?.total || 0)
   } catch (_error) {
     return sendError(res, 'SERVER_ERROR', 'Failed to fetch leave requests', {}, 500)
+  }
+}
+
+export const getLeavePolicies = async (req, res) => {
+  try {
+    const policies = await getLeavePoliciesForOrganization(req.user.organizationId)
+    return sendSuccess(res, { policies })
+  } catch (_error) {
+    return sendError(res, 'SERVER_ERROR', 'Failed to fetch leave policies', {}, 500)
+  }
+}
+
+export const upsertLeavePolicies = async (req, res) => {
+  try {
+    if (!canManageBalances(req.user?.role)) {
+      return sendError(res, 'FORBIDDEN', 'Only managers or HR can update leave policies', {}, 403)
+    }
+
+    const policies = Array.isArray(req.body?.policies) ? req.body.policies : []
+    if (policies.length === 0) {
+      return sendError(res, 'VALIDATION_ERROR', 'policies array is required', {}, 400)
+    }
+
+    await ensureLeavePolicyInfrastructure()
+
+    for (const policy of policies) {
+      const leaveType = normalizeLeaveType(policy?.leaveType)
+      const allocatedDays = toNumber(policy?.allocatedDays, -1)
+      const maxCarryForwardDays = toNumber(policy?.maxCarryForwardDays, -1)
+      const isActive = policy?.isActive === undefined ? true : Boolean(policy.isActive)
+
+      if (!leaveType) {
+        return sendError(res, 'VALIDATION_ERROR', 'policy.leaveType is required', {}, 400)
+      }
+      if (allocatedDays < 0 || maxCarryForwardDays < 0) {
+        return sendError(
+          res,
+          'VALIDATION_ERROR',
+          'allocatedDays and maxCarryForwardDays cannot be negative',
+          {},
+          400
+        )
+      }
+
+      await pool.query(
+        `
+          INSERT INTO leave_policies (
+            organization_id,
+            leave_type,
+            allocated_days,
+            max_carry_forward_days,
+            is_active,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+          ON CONFLICT (organization_id, leave_type)
+          DO UPDATE SET
+            allocated_days = EXCLUDED.allocated_days,
+            max_carry_forward_days = EXCLUDED.max_carry_forward_days,
+            is_active = EXCLUDED.is_active,
+            updated_at = CURRENT_TIMESTAMP
+        `,
+        [req.user.organizationId, leaveType, allocatedDays, maxCarryForwardDays, isActive]
+      )
+    }
+
+    const updated = await getLeavePoliciesForOrganization(req.user.organizationId)
+    return sendSuccess(res, { policies: updated })
+  } catch (_error) {
+    return sendError(res, 'SERVER_ERROR', 'Failed to update leave policies', {}, 500)
+  }
+}
+
+export const initializeYearLeaveBalances = async (req, res) => {
+  try {
+    if (!canManageBalances(req.user?.role)) {
+      return sendError(res, 'FORBIDDEN', 'Only managers or HR can initialize leave balances', {}, 403)
+    }
+
+    const year = Number(req.body?.year) || new Date().getFullYear()
+    const requestedEmployeeId = req.body?.employeeId ? Number(req.body.employeeId) : null
+
+    let employees = []
+    if (requestedEmployeeId) {
+      const employee = await getEmployeeById(req.user.organizationId, requestedEmployeeId)
+      if (!employee) {
+        return sendError(res, 'NOT_FOUND', 'Employee not found', {}, 404)
+      }
+      employees = [employee]
+    } else {
+      const list = await pool.query(
+        `
+          SELECT id, user_id AS "userId", name
+          FROM employees
+          WHERE organization_id = $1 AND user_id IS NOT NULL
+          ORDER BY id ASC
+        `,
+        [req.user.organizationId]
+      )
+      employees = list.rows
+    }
+
+    for (const employee of employees) {
+      await ensureLeaveBalancesForEmployeeYear({
+        organizationId: req.user.organizationId,
+        employeeId: employee.id,
+        year,
+      })
+    }
+
+    return sendSuccess(res, {
+      year,
+      processedEmployees: employees.length,
+      employeeIds: employees.map((item) => item.id),
+    })
+  } catch (_error) {
+    return sendError(res, 'SERVER_ERROR', 'Failed to initialize leave balances', {}, 500)
   }
 }
 

@@ -122,6 +122,21 @@ CREATE TABLE IF NOT EXISTS leave_balances (
   UNIQUE (organization_id, employee_id, leave_type, leave_year)
 );
 
+CREATE TABLE IF NOT EXISTS leave_policies (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  leave_type VARCHAR(40) NOT NULL,
+  allocated_days NUMERIC(6,2) NOT NULL DEFAULT 0,
+  max_carry_forward_days NUMERIC(6,2) NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, leave_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_leave_policies_org_active
+  ON leave_policies(organization_id, is_active);
+
 CREATE TABLE IF NOT EXISTS employee_face_profiles (
   id SERIAL PRIMARY KEY,
   organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,

@@ -78,7 +78,7 @@
 ### P1 - High Impact (Weeks 4-7)
 - [ ] Workflow Engine (generic, multi-step approval)
 - [x] Notification System (email, in-app, webhooks)
-- [ ] Leave Allocation & Balance Tracking
+- [x] Leave Allocation & Balance Tracking
 - [ ] Leave Approval Workflow
 - [x] Attendance Status Calculation
 - [x] Attendance Analytics
@@ -96,6 +96,11 @@ Notification verification note (Mar 25, 2026):
 Attendance analytics verification note (Mar 25, 2026):
 - Extended `GET /api/analytics/attendance` to include range-based KPIs: average attendance, average worked hours, on-time rate, late arrivals.
 - Added daily trend + worked-hours series, status distribution, and weekday attendance pattern for analytics dashboards.
+
+Leave allocation verification note (Mar 25, 2026):
+- Added policy-backed leave allocation defaults and carry-forward caps with endpoints `GET/PUT /api/leaves/policies`.
+- Added year bootstrap endpoint `POST /api/leaves/balances/initialize-year` for employee-level or org-wide balance initialization.
+- Leave submission now validates requested days against available balance before creating a pending request.
 
 ### P2 - Core Modules (Weeks 8-12)
 - [ ] Payroll System (salary structure, slips, tax)

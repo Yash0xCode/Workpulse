@@ -4,6 +4,8 @@ export const createLeave = (body, token) => nodePost('/leaves', body, token)
 export const getLeaves = (token) => nodeGet('/leaves', token)
 export const updateLeave = (id, body, token) => nodePut(`/leaves/${id}`, body, token)
 export const approveLeave = (id, body, token) => nodePut(`/leaves/${id}/approve`, body, token)
+export const getLeavePolicies = (token) => nodeGet('/leaves/policies', token)
+export const updateLeavePolicies = (body, token) => nodePut('/leaves/policies', body, token)
 export const getLeaveBalances = (token, params = {}) => {
 	const query = new URLSearchParams()
 	if (params.employeeId) query.set('employeeId', String(params.employeeId))
@@ -12,3 +14,5 @@ export const getLeaveBalances = (token, params = {}) => {
 	return nodeGet(`/leaves/balances${suffix}`, token)
 }
 export const updateLeaveBalances = (body, token) => nodePut('/leaves/balances', body, token)
+export const initializeYearLeaveBalances = (body, token) =>
+	nodePost('/leaves/balances/initialize-year', body, token)
