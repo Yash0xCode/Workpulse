@@ -315,6 +315,18 @@ export default function Attendance({ token = '', user }) {
             <span className="ls-value">{teamSummary.absentToday ?? 0}</span>
             <span className="ls-label">Absent Today</span>
           </div>
+          <div className="leave-stat-card">
+            <span className="ls-value">{teamSummary.halfDay ?? 0}</span>
+            <span className="ls-label">Half Day</span>
+          </div>
+          <div className="leave-stat-card">
+            <span className="ls-value">{teamSummary.onLeave ?? 0}</span>
+            <span className="ls-label">On Leave</span>
+          </div>
+          <div className="leave-stat-card">
+            <span className="ls-value">{teamSummary.weekend ?? 0}</span>
+            <span className="ls-label">Weekend</span>
+          </div>
         </div>
       )}
 

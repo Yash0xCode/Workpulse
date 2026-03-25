@@ -80,8 +80,12 @@
 - [ ] Notification System (email, in-app, webhooks)
 - [ ] Leave Allocation & Balance Tracking
 - [ ] Leave Approval Workflow
-- [ ] Attendance Status Calculation
+- [x] Attendance Status Calculation
 - [ ] Attendance Analytics
+
+Latest verification note (Mar 25, 2026):
+- Attendance status resolution now classifies `present`, `absent`, `half_day`, `on_leave`, `weekend`, and `in_progress`.
+- Added manager-facing endpoints `GET /api/attendance/summary` (extended metrics) and `GET /api/attendance/status` (per-employee status list).
 
 ### P2 - Core Modules (Weeks 8-12)
 - [ ] Payroll System (salary structure, slips, tax)

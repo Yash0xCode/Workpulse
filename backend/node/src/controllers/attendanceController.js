@@ -33,6 +33,122 @@ const normalizeAttendance = (row) => ({
 const canViewOrganizationAttendance = (role) =>
   ['hr_manager', 'super_admin', 'institute_admin'].includes(role)
 
+const resolveAttendanceStatus = ({ checkIn, checkOut, isWeekend, isOnLeave }) => {
+  if (isWeekend) return 'weekend'
+  if (isOnLeave) return 'on_leave'
+  if (!checkIn && !checkOut) return 'absent'
+  if (checkIn && !checkOut) return 'in_progress'
+  if (!checkIn || !checkOut) return 'absent'
+
+  const hoursWorked = (new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60)
+  if (hoursWorked >= 8) return 'present'
+  if (hoursWorked >= 4) return 'half_day'
+  return 'absent'
+}
+
+const buildEmployeeScopeQuery = ({ role }) => {
+  if (canViewOrganizationAttendance(role)) {
+    return {
+      sql: `
+        SELECT e.id, e.user_id AS "userId", e.name
+        FROM employees e
+        WHERE e.organization_id = $1
+          AND e.user_id IS NOT NULL
+      `,
+      params: (orgId) => [orgId],
+    }
+  }
+
+  return {
+    sql: `
+      SELECT e.id, e.user_id AS "userId", e.name
+      FROM employees e
+      WHERE e.organization_id = $1
+        AND e.user_id IS NOT NULL
+        AND e.manager_id = (
+          SELECT m.id
+          FROM employees m
+          WHERE m.organization_id = $1 AND m.user_id = $2
+          LIMIT 1
+        )
+    `,
+    params: (orgId, userId) => [orgId, userId],
+  }
+}
+
+const fetchAttendanceStatuses = async ({ role, organizationId, userId, targetDate }) => {
+  const employeeScope = buildEmployeeScopeQuery({ role })
+  const scopeParams = employeeScope.params(organizationId, userId)
+  const dateParamIndex = scopeParams.length + 1
+
+  const { rows } = await pool.query(
+    `
+      WITH employee_scope AS (
+        ${employeeScope.sql}
+      ),
+      latest_logs AS (
+        SELECT
+          a.user_id AS "userId",
+          MAX(a.check_in_time) AS "checkIn",
+          MAX(a.check_out_time) AS "checkOut"
+        FROM attendance_logs a
+        JOIN employee_scope es ON es."userId" = a.user_id
+        WHERE a.organization_id = $1
+          AND a.attendance_date = $${dateParamIndex}::date
+        GROUP BY a.user_id
+      ),
+      approved_leaves AS (
+        SELECT DISTINCT l.user_id AS "userId"
+        FROM leaves l
+        JOIN employee_scope es ON es."userId" = l.user_id
+        WHERE l.organization_id = $1
+          AND l.status = 'approved'
+          AND $${dateParamIndex}::date BETWEEN l.from_date AND l.to_date
+      )
+      SELECT
+        es.id AS "employeeId",
+        es."userId",
+        es.name,
+        ll."checkIn",
+        ll."checkOut",
+        EXTRACT(ISODOW FROM $${dateParamIndex}::date)::int AS "isoDay",
+        (al."userId" IS NOT NULL) AS "isOnLeave"
+      FROM employee_scope es
+      LEFT JOIN latest_logs ll ON ll."userId" = es."userId"
+      LEFT JOIN approved_leaves al ON al."userId" = es."userId"
+      ORDER BY es.name ASC
+    `,
+    [...scopeParams, targetDate]
+  )
+
+  return rows.map((row) => {
+    const isWeekend = row.isoDay === 6 || row.isoDay === 7
+    const status = resolveAttendanceStatus({
+      checkIn: row.checkIn,
+      checkOut: row.checkOut,
+      isWeekend,
+      isOnLeave: row.isOnLeave,
+    })
+    const workedHours =
+      row.checkIn && row.checkOut
+        ? Number(((new Date(row.checkOut) - new Date(row.checkIn)) / (1000 * 60 * 60)).toFixed(2))
+        : 0
+
+    return {
+      employeeId: row.employeeId,
+      userId: row.userId,
+      name: row.name,
+      checkIn: row.checkIn,
+      checkOut: row.checkOut,
+      workedHours,
+      status,
+      isWeekend,
+      isOnLeave: Boolean(row.isOnLeave),
+      attendanceDate: targetDate,
+    }
+  })
+}
+
 export const checkIn = async (req, res) => {
   if (!req.body.faceVerified || !req.body.locationVerified) {
     return res.status(400).json({
@@ -76,7 +192,7 @@ export const checkIn = async (req, res) => {
           location_city,
           distance_meters
         )
-        VALUES ($1, $2, CURRENT_DATE, CURRENT_TIMESTAMP, 'present', $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, CURRENT_DATE, CURRENT_TIMESTAMP, 'in_progress', $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING id
       `,
       [
@@ -103,25 +219,36 @@ export const checkIn = async (req, res) => {
 export const checkOut = async (req, res) => {
   try {
     const userId = Number(req.body.userId || req.user.id)
-    const result = await pool.query(
+    const openRecord = await pool.query(
       `
-        UPDATE attendance_logs
-        SET check_out_time = CURRENT_TIMESTAMP
-        WHERE id = (
-          SELECT id
-          FROM attendance_logs
-          WHERE user_id = $1
-            AND organization_id = $2
-            AND check_out_time IS NULL
-          ORDER BY check_in_time DESC
-          LIMIT 1
-        )
-        RETURNING id
+        SELECT id, check_in_time AS "checkIn"
+        FROM attendance_logs
+        WHERE user_id = $1
+          AND organization_id = $2
+          AND check_out_time IS NULL
+        ORDER BY check_in_time DESC
+        LIMIT 1
       `,
       [userId, req.user.organizationId]
     )
 
-    if (!result.rows[0]) return res.status(404).json({ message: 'Open check-in not found' })
+    if (!openRecord.rows[0]) return res.status(404).json({ message: 'Open check-in not found' })
+
+    const checkIn = openRecord.rows[0].checkIn
+    const now = new Date()
+    const workedHours = (now - new Date(checkIn)) / (1000 * 60 * 60)
+    const resolvedStatus = workedHours >= 8 ? 'present' : workedHours >= 4 ? 'half_day' : 'absent'
+
+    const result = await pool.query(
+      `
+        UPDATE attendance_logs
+        SET check_out_time = CURRENT_TIMESTAMP,
+            status = $3
+        WHERE id = $4
+        RETURNING id
+      `,
+      [userId, req.user.organizationId, resolvedStatus, openRecord.rows[0].id]
+    )
 
     const updated = await pool.query(`${attendanceSelect} WHERE a.id = $1`, [result.rows[0].id])
     return res.json({ data: normalizeAttendance(updated.rows[0]) })
@@ -167,63 +294,59 @@ export const getAttendanceByUser = async (req, res) => {
 export const getAttendanceStatusSummary = async (req, res) => {
   try {
     const role = req.user?.role
-    const orgId = req.user.organizationId
+    const targetDate = String(req.query.date || new Date().toISOString().slice(0, 10))
+    const statuses = await fetchAttendanceStatuses({
+      role,
+      organizationId: req.user.organizationId,
+      userId: req.user.id,
+      targetDate,
+    })
 
-    let employeeScopeSql = `
-      SELECT e.id, e.user_id AS "userId"
-      FROM employees e
-      WHERE e.organization_id = $1
-        AND e.user_id IS NOT NULL
-    `
-    let params = [orgId]
-
-    if (!canViewOrganizationAttendance(role)) {
-      employeeScopeSql = `
-        SELECT e.id, e.user_id AS "userId"
-        FROM employees e
-        WHERE e.organization_id = $1
-          AND e.user_id IS NOT NULL
-          AND e.manager_id = (
-            SELECT m.id
-            FROM employees m
-            WHERE m.organization_id = $1 AND m.user_id = $2
-            LIMIT 1
-          )
-      `
-      params = [orgId, req.user.id]
-    }
-
-    const { rows } = await pool.query(
-      `
-        WITH employee_scope AS (
-          ${employeeScopeSql}
-        ),
-        today_logs AS (
-          SELECT
-            a.user_id AS "userId",
-            MAX(a.check_in_time) AS "latestCheckIn",
-            MAX(a.check_out_time) AS "latestCheckOut"
-          FROM attendance_logs a
-          JOIN employee_scope es ON es."userId" = a.user_id
-          WHERE a.organization_id = $1
-            AND a.attendance_date = CURRENT_DATE
-          GROUP BY a.user_id
-        )
-        SELECT
-          (SELECT COUNT(*)::int FROM employee_scope) AS "totalEmployees",
-          (SELECT COUNT(*)::int FROM today_logs) AS "presentToday",
-          (SELECT COUNT(*)::int FROM today_logs WHERE "latestCheckIn" IS NOT NULL AND "latestCheckOut" IS NULL) AS "inProgress",
-          (SELECT COUNT(*)::int FROM today_logs WHERE "latestCheckOut" IS NOT NULL) AS "completed",
-          GREATEST(
-            (SELECT COUNT(*)::int FROM employee_scope) - (SELECT COUNT(*)::int FROM today_logs),
-            0
-          ) AS "absentToday"
-      `,
-      params
+    const summary = statuses.reduce(
+      (acc, item) => {
+        acc.byStatus[item.status] = (acc.byStatus[item.status] || 0) + 1
+        if (item.status === 'present') acc.presentToday += 1
+        if (item.status === 'in_progress') acc.inProgress += 1
+        if (item.status === 'half_day') acc.halfDay += 1
+        if (item.status === 'on_leave') acc.onLeave += 1
+        if (item.status === 'weekend') acc.weekend += 1
+        if (item.status === 'absent') acc.absentToday += 1
+        if (item.checkOut) acc.completed += 1
+        return acc
+      },
+      {
+        attendanceDate: targetDate,
+        totalEmployees: statuses.length,
+        presentToday: 0,
+        inProgress: 0,
+        completed: 0,
+        absentToday: 0,
+        halfDay: 0,
+        onLeave: 0,
+        weekend: 0,
+        holiday: 0,
+        byStatus: {},
+      }
     )
 
-    return res.json({ data: rows[0] || {} })
+    return res.json({ data: summary })
   } catch (_error) {
     return res.status(500).json({ message: 'Failed to fetch attendance summary' })
+  }
+}
+
+export const getAttendanceStatusList = async (req, res) => {
+  try {
+    const targetDate = String(req.query.date || new Date().toISOString().slice(0, 10))
+    const statuses = await fetchAttendanceStatuses({
+      role: req.user?.role,
+      organizationId: req.user.organizationId,
+      userId: req.user.id,
+      targetDate,
+    })
+
+    return res.json({ data: statuses })
+  } catch (_error) {
+    return res.status(500).json({ message: 'Failed to fetch attendance status list' })
   }
 }
