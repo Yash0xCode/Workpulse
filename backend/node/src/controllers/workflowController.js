@@ -1,5 +1,11 @@
 import { pool } from '../config/db.js'
-import { ensureLeaveWorkflowDefinition } from '../services/workflowService.js'
+import {
+  createWorkflowDefinition,
+  createWorkflowInstance,
+  ensureLeaveWorkflowDefinition,
+  transitionWorkflowInstance,
+  updateWorkflowDefinition,
+} from '../services/workflowService.js'
 import { sendError, sendPaginated, sendSuccess } from '../utils/response.js'
 
 const managerRoles = ['department_manager', 'hr_manager', 'super_admin', 'institute_admin']
@@ -56,6 +62,53 @@ export const getWorkflowDefinitions = async (_req, res) => {
     return sendSuccess(res, rows.rows)
   } catch (_error) {
     return sendError(res, 'SERVER_ERROR', 'Failed to fetch workflow definitions', {}, 500)
+  }
+}
+
+export const createDefinition = async (req, res) => {
+  try {
+    if (!managerRoles.includes(req.user?.role || '')) {
+      return sendError(res, 'FORBIDDEN', 'Insufficient permissions to create workflow definitions', {}, 403)
+    }
+
+    const created = await createWorkflowDefinition({
+      code: req.body?.code,
+      resourceType: req.body?.resourceType,
+      initialState: req.body?.initialState,
+      states: req.body?.states,
+      transitions: req.body?.transitions,
+      isActive: req.body?.isActive,
+    })
+
+    const row = await pool.query(`${definitionSelect} WHERE id = $1 LIMIT 1`, [created.id])
+    return sendSuccess(res, row.rows[0], {}, 201)
+  } catch (error) {
+    return sendError(res, 'VALIDATION_ERROR', error.message || 'Failed to create definition', {}, 400)
+  }
+}
+
+export const editDefinition = async (req, res) => {
+  try {
+    if (!managerRoles.includes(req.user?.role || '')) {
+      return sendError(res, 'FORBIDDEN', 'Insufficient permissions to update workflow definitions', {}, 403)
+    }
+
+    const updated = await updateWorkflowDefinition({
+      definitionId: Number(req.params.id),
+      code: req.body?.code,
+      resourceType: req.body?.resourceType,
+      initialState: req.body?.initialState,
+      states: req.body?.states,
+      transitions: req.body?.transitions,
+      isActive: req.body?.isActive,
+    })
+
+    if (!updated) return sendError(res, 'NOT_FOUND', 'Workflow definition not found', {}, 404)
+
+    const row = await pool.query(`${definitionSelect} WHERE id = $1 LIMIT 1`, [updated.id])
+    return sendSuccess(res, row.rows[0])
+  } catch (error) {
+    return sendError(res, 'VALIDATION_ERROR', error.message || 'Failed to update definition', {}, 400)
   }
 }
 
@@ -150,5 +203,68 @@ export const getWorkflowActions = async (req, res) => {
     return sendSuccess(res, actions.rows)
   } catch (_error) {
     return sendError(res, 'SERVER_ERROR', 'Failed to fetch workflow actions', {}, 500)
+  }
+}
+
+export const createInstance = async (req, res) => {
+  try {
+    if (!managerRoles.includes(req.user?.role || '')) {
+      return sendError(res, 'FORBIDDEN', 'Insufficient permissions to create workflow instances', {}, 403)
+    }
+
+    const definitionId = Number(req.body?.definitionId)
+    const resourceId = Number(req.body?.resourceId)
+
+    if (!definitionId || !resourceId) {
+      return sendError(res, 'VALIDATION_ERROR', 'definitionId and resourceId are required', {}, 400)
+    }
+
+    const created = await createWorkflowInstance({
+      definitionId,
+      organizationId: req.user.organizationId,
+      requesterUserId: req.body?.requesterUserId ? Number(req.body.requesterUserId) : req.user.id,
+      actorUserId: req.user.id,
+      resourceId,
+      comments: req.body?.comments || 'Workflow instance created',
+    })
+
+    const row = await pool.query(`${instanceSelect} WHERE wi.id = $1 LIMIT 1`, [created.id])
+    return sendSuccess(res, row.rows[0], {}, 201)
+  } catch (error) {
+    return sendError(res, 'VALIDATION_ERROR', error.message || 'Failed to create workflow instance', {}, 400)
+  }
+}
+
+export const transitionInstance = async (req, res) => {
+  try {
+    if (!managerRoles.includes(req.user?.role || '')) {
+      return sendError(res, 'FORBIDDEN', 'Insufficient permissions to transition workflow instances', {}, 403)
+    }
+
+    const instanceId = Number(req.params.id)
+    const action = String(req.body?.action || '').trim()
+    if (!instanceId || !action) {
+      return sendError(res, 'VALIDATION_ERROR', 'instance id and action are required', {}, 400)
+    }
+
+    const access = await pool.query(
+      'SELECT id FROM workflow_instances WHERE id = $1 AND organization_id = $2 LIMIT 1',
+      [instanceId, req.user.organizationId]
+    )
+    if (!access.rows[0]) {
+      return sendError(res, 'NOT_FOUND', 'Workflow instance not found', {}, 404)
+    }
+
+    const updated = await transitionWorkflowInstance({
+      instanceId,
+      actorUserId: req.user.id,
+      action,
+      comments: req.body?.comments || '',
+    })
+
+    const row = await pool.query(`${instanceSelect} WHERE wi.id = $1 LIMIT 1`, [updated.id])
+    return sendSuccess(res, row.rows[0])
+  } catch (error) {
+    return sendError(res, 'VALIDATION_ERROR', error.message || 'Failed to transition instance', {}, 400)
   }
 }

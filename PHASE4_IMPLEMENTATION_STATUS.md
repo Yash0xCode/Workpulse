@@ -76,7 +76,7 @@
 ## 📋 TODO (Remaining Priorities)
 
 ### P1 - High Impact (Weeks 4-7)
-- [ ] Workflow Engine (generic, multi-step approval)
+- [x] Workflow Engine (generic, multi-step approval)
 - [x] Notification System (email, in-app, webhooks)
 - [x] Leave Allocation & Balance Tracking
 - [x] Leave Approval Workflow
@@ -107,6 +107,11 @@ Leave approval workflow verification note (Mar 25, 2026):
 - Rejections require reviewer comments for auditable decision trails.
 - Added leave workflow timeline endpoint `GET /api/leaves/:id/workflow` and wired workflow visibility in leave UI.
 
+Workflow engine verification note (Mar 25, 2026):
+- Added generic workflow definition endpoints (`POST/PUT /api/workflows/definitions`) with state and transition validation.
+- Added generic workflow instance orchestration endpoints (`POST /api/workflows/instances`, `POST /api/workflows/instances/:id/transition`).
+- Workflow Center now supports quick definition creation, test instance creation, and action-based transitions.
+
 ### P2 - Core Modules (Weeks 8-12)
 - [ ] Payroll System (salary structure, slips, tax)
 - [ ] Recruitment System (job openings, applicants, interviews, offers)
@@ -119,14 +124,17 @@ Leave approval workflow verification note (Mar 25, 2026):
 - [ ] ML Model Integration (attrition, performance prediction)
 - [ ] Frontend Refactor (TypeScript, state management)
 - [ ] Real-time Updates (WebSocket)
-- [ ] Mobile Responsiveness
+
+Out of scope (per product direction):
+- Mobile responsiveness improvements
 
 ### P4 - Polish & Launch (Weeks 16+)
-- [ ] Performance Optimization
-- [ ] Security Hardening
-- [ ] Comprehensive Testing (unit, integration, e2e)
-- [ ] Deployment & DevOps
-- [ ] Documentation & Training
+- Removed from current scope (per product direction):
+  - Performance optimization
+  - Security hardening
+  - Comprehensive testing (unit, integration, e2e)
+  - Deployment and DevOps
+  - Final documentation and training
 
 ---
 

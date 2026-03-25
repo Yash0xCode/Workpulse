@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../../components/common/Icons.jsx'
 import {
+  createWorkflowDefinition,
+  createWorkflowInstance,
   getWorkflowActions,
   getWorkflowDefinitions,
   getWorkflowInstances,
   seedWorkflowDefinitions,
+  transitionWorkflowInstance,
 } from '../../services/workflowService.js'
 
 function formatDate(value) {
@@ -28,6 +31,15 @@ function WorkflowCenter({ token = '' }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [transitionAction, setTransitionAction] = useState('')
+
+  const [newDefinition, setNewDefinition] = useState({
+    code: 'document_approval',
+    resourceType: 'document',
+    initialState: 'pending',
+    states: 'pending,approved,rejected',
+    transitions: 'pending:approve:approved,pending:reject:rejected',
+  })
 
   const currentCounts = useMemo(() => {
     const total = instances.length
@@ -65,6 +77,96 @@ function WorkflowCenter({ token = '' }) {
       setActions(Array.isArray(response?.data) ? response.data : [])
     } catch {
       setActions([])
+    }
+  }
+
+  const parseTransitions = (raw) =>
+    String(raw || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        const [from, action, to] = item.split(':').map((v) => (v || '').trim())
+        return { from, action, to }
+      })
+
+  const handleCreateDefinition = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await createWorkflowDefinition(
+        {
+          code: newDefinition.code,
+          resourceType: newDefinition.resourceType,
+          initialState: newDefinition.initialState,
+          states: newDefinition.states.split(',').map((item) => item.trim()).filter(Boolean),
+          transitions: parseTransitions(newDefinition.transitions),
+          isActive: true,
+        },
+        token
+      )
+      await loadAll()
+    } catch (createError) {
+      setError(createError.message || 'Failed to create workflow definition.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const availableActions = useMemo(() => {
+    if (!selectedInstance) return []
+    const definition = definitions.find((d) => d.code === selectedInstance.definitionCode)
+    const transitions = Array.isArray(definition?.transitions) ? definition.transitions : []
+    return transitions
+      .filter((item) => String(item?.from || '').toLowerCase() === String(selectedInstance.currentState || '').toLowerCase())
+      .map((item) => item.action)
+  }, [definitions, selectedInstance])
+
+  useEffect(() => {
+    if (availableActions.length > 0) {
+      setTransitionAction(availableActions[0])
+    } else {
+      setTransitionAction('')
+    }
+  }, [availableActions])
+
+  const handleTransition = async () => {
+    if (!selectedInstance?.id || !transitionAction) return
+    setBusy(true)
+    setError('')
+    try {
+      await transitionWorkflowInstance(
+        selectedInstance.id,
+        { action: transitionAction, comments: `Triggered from Workflow Center: ${transitionAction}` },
+        token
+      )
+      await loadAll()
+      await loadActions(selectedInstance.id)
+    } catch (transitionError) {
+      setError(transitionError.message || 'Failed to transition workflow instance.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleCreateInstance = async () => {
+    if (definitions.length === 0) return
+    setBusy(true)
+    setError('')
+    try {
+      await createWorkflowInstance(
+        {
+          definitionId: definitions[0].id,
+          resourceId: Date.now(),
+          comments: 'Instance created from Workflow Center',
+        },
+        token
+      )
+      await loadAll()
+    } catch (instanceError) {
+      setError(instanceError.message || 'Failed to create workflow instance.')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -132,6 +234,33 @@ function WorkflowCenter({ token = '' }) {
         </div>
       </div>
 
+      <article className="workflow-panel" style={{ marginBottom: 16 }}>
+        <div className="workflow-panel-header">
+          <h3>Quick Workflow Builder</h3>
+          <span>Create reusable definitions fast</span>
+        </div>
+        <div className="grid-2" style={{ gap: 12 }}>
+          <input value={newDefinition.code} onChange={(e) => setNewDefinition((p) => ({ ...p, code: e.target.value }))} placeholder="code" />
+          <input value={newDefinition.resourceType} onChange={(e) => setNewDefinition((p) => ({ ...p, resourceType: e.target.value }))} placeholder="resourceType" />
+          <input value={newDefinition.initialState} onChange={(e) => setNewDefinition((p) => ({ ...p, initialState: e.target.value }))} placeholder="initialState" />
+          <input value={newDefinition.states} onChange={(e) => setNewDefinition((p) => ({ ...p, states: e.target.value }))} placeholder="states comma separated" />
+        </div>
+        <input
+          style={{ marginTop: 10, width: '100%' }}
+          value={newDefinition.transitions}
+          onChange={(e) => setNewDefinition((p) => ({ ...p, transitions: e.target.value }))}
+          placeholder="transitions (from:action:to,from:action:to)"
+        />
+        <div className="workflow-hero-actions" style={{ marginTop: 12 }}>
+          <button className="btn btn-primary" type="button" onClick={handleCreateDefinition} disabled={busy}>
+            Create Definition
+          </button>
+          <button className="btn btn-outline" type="button" onClick={handleCreateInstance} disabled={busy || definitions.length === 0}>
+            Create Test Instance
+          </button>
+        </div>
+      </article>
+
       <div className="workflow-grid">
         <article className="workflow-panel">
           <div className="workflow-panel-header">
@@ -169,6 +298,20 @@ function WorkflowCenter({ token = '' }) {
           {!selectedInstance && <div className="workflow-empty">Select an instance to view actions.</div>}
           {selectedInstance && (
             <div className="workflow-timeline">
+              {availableActions.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                  <select value={transitionAction} onChange={(e) => setTransitionAction(e.target.value)}>
+                    {availableActions.map((action) => (
+                      <option key={action} value={action}>
+                        {action}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn btn-primary" type="button" onClick={handleTransition} disabled={busy || !transitionAction}>
+                    Transition
+                  </button>
+                </div>
+              )}
               {actions.map((action) => (
                 <div key={action.id} className="workflow-timeline-item">
                   <div className="timeline-dot" />
