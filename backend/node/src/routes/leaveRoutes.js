@@ -5,6 +5,7 @@ import {
 	getLeaveBalances,
 	getLeavePolicies,
 	getLeaves,
+	getLeaveWorkflowDetails,
 	getPendingLeaveApprovals,
 	initializeYearLeaveBalances,
 	updateLeave,
@@ -23,6 +24,7 @@ router.get('/balances', requirePermission(PERMISSIONS.VIEW_LEAVES), getLeaveBala
 router.put('/balances', requirePermission(PERMISSIONS.APPROVE_LEAVE), updateLeaveBalances)
 router.post('/balances/initialize-year', requirePermission(PERMISSIONS.APPROVE_LEAVE), initializeYearLeaveBalances)
 router.get('/pending-approvals', requirePermission(PERMISSIONS.APPROVE_LEAVE), getPendingLeaveApprovals)
+router.get('/:id/workflow', requirePermission(PERMISSIONS.VIEW_LEAVES), getLeaveWorkflowDetails)
 router.put('/:id', requirePermission(PERMISSIONS.APPLY_LEAVE), updateLeave)
 router.put('/:id/approve', requirePermission(PERMISSIONS.APPROVE_LEAVE), updateLeave)
 

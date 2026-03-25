@@ -3,7 +3,15 @@ import Button from '../../components/common/Button.jsx'
 import Input from '../../components/common/Input.jsx'
 import Select from '../../components/common/Select.jsx'
 import { PERMISSIONS, hasPermission } from '../../constants/rbac.js'
-import { approveLeave, createLeave, getLeaveBalances, getLeaves, updateLeave } from '../../services/leaveService.js'
+import {
+  approveLeave,
+  createLeave,
+  getLeaveBalances,
+  getLeaveWorkflow,
+  getLeaves,
+  getPendingLeaveApprovals,
+  updateLeave,
+} from '../../services/leaveService.js'
 
 const leaveTypes = [
   { label: 'Sick Leave', value: 'Sick Leave' },
@@ -28,6 +36,8 @@ export default function Leave({ token = '', user }) {
   const [submitting, setSubmitting] = useState(false)
   const [notice, setNotice] = useState('')
   const [form, setForm] = useState({ leaveType: 'Casual Leave', startDate: '', endDate: '', reason: '' })
+  const [workflowDetail, setWorkflowDetail] = useState(null)
+  const [workflowLoadingId, setWorkflowLoadingId] = useState(null)
 
   const canApprove = hasPermission(user, PERMISSIONS.APPROVE_LEAVE)
 
@@ -35,12 +45,17 @@ export default function Leave({ token = '', user }) {
 
   const load = async () => {
     try {
-      const [leavesRes, balancesRes] = await Promise.all([
+      const [leavesRes, approvalsRes, balancesRes] = await Promise.all([
         getLeaves(token),
+        canApprove ? getPendingLeaveApprovals(token) : Promise.resolve({ data: [] }),
         getLeaveBalances(token, { year: new Date().getFullYear() }),
       ])
 
-      const data = Array.isArray(leavesRes?.data) ? leavesRes.data : []
+      const allLeaves = Array.isArray(leavesRes?.data) ? leavesRes.data : []
+      const pendingApprovals = Array.isArray(approvalsRes?.data) ? approvalsRes.data : []
+      const data = canApprove
+        ? Array.from(new Map([...pendingApprovals, ...allLeaves].map((item) => [item.id, item])).values())
+        : allLeaves
       if (data.length > 0) setLeaves(data)
 
       const balances = Array.isArray(balancesRes?.data?.balances) ? balancesRes.data.balances : []
@@ -82,11 +97,33 @@ export default function Leave({ token = '', user }) {
 
   const handleDecision = async (id, status) => {
     try {
-      const res = await approveLeave(id, { status }, token)
+      const payload = { status }
+      if (status === 'rejected') {
+        const reason = window.prompt('Add rejection reason (required):', 'Insufficient details provided')
+        if (!reason || !reason.trim()) {
+          setNotice('Rejection reason is required.')
+          return
+        }
+        payload.comments = reason.trim()
+      }
+
+      const res = await approveLeave(id, payload, token)
       setLeaves((prev) => prev.map((item) => (item.id === id ? { ...item, ...res.data } : item)))
       setNotice(`Leave ${status} successfully.`)
     } catch (error) {
       setNotice(error.message || `Failed to ${status} leave.`)
+    }
+  }
+
+  const handleViewWorkflow = async (leaveId) => {
+    setWorkflowLoadingId(leaveId)
+    try {
+      const res = await getLeaveWorkflow(leaveId, token)
+      setWorkflowDetail({ leaveId, ...res.data })
+    } catch (error) {
+      setNotice(error.message || 'Failed to load workflow details.')
+    } finally {
+      setWorkflowLoadingId(null)
     }
   }
 
@@ -197,6 +234,14 @@ export default function Leave({ token = '', user }) {
                   <td><span className={`status-pill ${statusColors[l.status] || 'inactive'}`}>{l.status}</span></td>
                   <td>
                     <div className="leave-row-actions">
+                      <button
+                        type="button"
+                        className="action-btn"
+                        onClick={() => handleViewWorkflow(l.id)}
+                        disabled={workflowLoadingId === l.id}
+                      >
+                        {workflowLoadingId === l.id ? 'Loading…' : 'Workflow'}
+                      </button>
                       {l.status === 'pending' && canApprove && (
                         <>
                           <button
@@ -226,6 +271,42 @@ export default function Leave({ token = '', user }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {workflowDetail && (
+        <div className="chart-card" style={{ marginTop: 12 }}>
+          <div className="card-title">Workflow Timeline (Leave #{workflowDetail.leaveId})</div>
+          {Array.isArray(workflowDetail.actions) && workflowDetail.actions.length > 0 ? (
+            <div className="employees-table" style={{ marginTop: 12 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Step</th>
+                    <th>Actor</th>
+                    <th>Action</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Comments</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {workflowDetail.actions.map((action) => (
+                    <tr key={action.id}>
+                      <td>{action.stepNo}</td>
+                      <td>{action.actorName || 'System'}</td>
+                      <td>{action.action}</td>
+                      <td>{action.fromState || '—'}</td>
+                      <td>{action.toState || '—'}</td>
+                      <td>{action.comments || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div style={{ marginTop: 8, color: 'var(--wp-text-muted)' }}>No workflow history available yet.</div>
+          )}
         </div>
       )}
     </div>

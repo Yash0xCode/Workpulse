@@ -2,6 +2,8 @@ import { nodeGet, nodePost, nodePut } from './apiClient.js'
 
 export const createLeave = (body, token) => nodePost('/leaves', body, token)
 export const getLeaves = (token) => nodeGet('/leaves', token)
+export const getPendingLeaveApprovals = (token) => nodeGet('/leaves/pending-approvals', token)
+export const getLeaveWorkflow = (leaveId, token) => nodeGet(`/leaves/${leaveId}/workflow`, token)
 export const updateLeave = (id, body, token) => nodePut(`/leaves/${id}`, body, token)
 export const approveLeave = (id, body, token) => nodePut(`/leaves/${id}/approve`, body, token)
 export const getLeavePolicies = (token) => nodeGet('/leaves/policies', token)

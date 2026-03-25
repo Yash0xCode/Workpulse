@@ -37,6 +37,9 @@ const calculateRequestedDays = (startDate, endDate) => {
 const canManageBalances = (role) =>
   ['department_manager', 'hr_manager', 'super_admin', 'institute_admin'].includes(role)
 
+const canApproveLeaveByRole = (role) =>
+  ['department_manager', 'hr_manager', 'super_admin', 'institute_admin'].includes(role)
+
 const leaveSelect = `
   SELECT
     l.id,
@@ -184,6 +187,37 @@ const getEmployeeById = async (organizationId, employeeId) => {
     [organizationId, Number(employeeId)]
   )
   return rows[0] || null
+}
+
+const canUserApproveEmployeeLeave = async ({ organizationId, approverUserId, approverRole, employeeId }) => {
+  if (!canApproveLeaveByRole(approverRole)) return false
+  if (['hr_manager', 'super_admin', 'institute_admin'].includes(approverRole)) return true
+
+  const manager = await pool.query(
+    `
+      SELECT id
+      FROM employees
+      WHERE organization_id = $1 AND user_id = $2
+      LIMIT 1
+    `,
+    [organizationId, approverUserId]
+  )
+
+  if (!manager.rows[0]) return false
+
+  const teamMember = await pool.query(
+    `
+      SELECT id
+      FROM employees
+      WHERE organization_id = $1
+        AND id = $2
+        AND manager_id = $3
+      LIMIT 1
+    `,
+    [organizationId, employeeId, manager.rows[0].id]
+  )
+
+  return Boolean(teamMember.rows[0])
 }
 
 const ensureLeavePolicyInfrastructure = async () => {
@@ -777,6 +811,10 @@ export const updateLeave = async (req, res) => {
         return sendError(res, 'VALIDATION_ERROR', 'status must be approved or rejected', {}, 400)
       }
 
+      if (nextStatus === 'rejected' && !String(req.body?.comments || '').trim()) {
+        return sendError(res, 'VALIDATION_ERROR', 'comments are required when rejecting a leave', {}, 400)
+      }
+
       const existing = await pool.query(
         `
           SELECT
@@ -811,6 +849,23 @@ export const updateLeave = async (req, res) => {
 
       if (existingLeave.userId === req.user.id) {
         return sendError(res, 'FORBIDDEN', 'You cannot approve your own leave request', {}, 403)
+      }
+
+      const canApprove = await canUserApproveEmployeeLeave({
+        organizationId: req.user.organizationId,
+        approverUserId: req.user.id,
+        approverRole: req.user?.role,
+        employeeId: existingLeave.employeeId,
+      })
+
+      if (!canApprove) {
+        return sendError(
+          res,
+          'FORBIDDEN',
+          'You are not authorized to review this leave request',
+          {},
+          403
+        )
       }
 
       if (nextStatus === 'approved') {
@@ -1036,5 +1091,101 @@ export const getPendingLeaveApprovals = async (req, res) => {
     return sendPaginated(res, rows.map(normalizeLeave), page, limit, count.rows[0]?.total || 0)
   } catch (_error) {
     return sendError(res, 'SERVER_ERROR', 'Failed to fetch pending leave approvals', {}, 500)
+  }
+}
+
+export const getLeaveWorkflowDetails = async (req, res) => {
+  try {
+    const leaveId = Number(req.params.id)
+    if (!leaveId) {
+      return sendError(res, 'VALIDATION_ERROR', 'Invalid leave id', {}, 400)
+    }
+
+    const leaveResult = await pool.query(
+      `
+        SELECT
+          l.id,
+          l.user_id AS "userId",
+          l.employee_id AS "employeeId",
+          l.organization_id AS "organizationId",
+          l.status
+        FROM leaves l
+        WHERE l.id = $1 AND l.organization_id = $2
+        LIMIT 1
+      `,
+      [leaveId, req.user.organizationId]
+    )
+
+    const leave = leaveResult.rows[0]
+    if (!leave) {
+      return sendError(res, 'NOT_FOUND', 'Leave not found', {}, 404)
+    }
+
+    const role = req.user?.role
+    if (leave.userId !== req.user.id) {
+      const canApprove = await canUserApproveEmployeeLeave({
+        organizationId: req.user.organizationId,
+        approverUserId: req.user.id,
+        approverRole: role,
+        employeeId: leave.employeeId,
+      })
+      if (!canApprove && !['hr_manager', 'super_admin', 'institute_admin'].includes(role || '')) {
+        return sendError(res, 'FORBIDDEN', 'You are not authorized to view this workflow', {}, 403)
+      }
+    }
+
+    const instance = await pool.query(
+      `
+        SELECT
+          wi.id,
+          wi.current_state AS "currentState",
+          wi.status,
+          wi.created_at AS "createdAt",
+          wi.updated_at AS "updatedAt",
+          wi.closed_at AS "closedAt"
+        FROM workflow_instances wi
+        WHERE wi.organization_id = $1
+          AND wi.resource_type = 'leave'
+          AND wi.resource_id = $2
+        LIMIT 1
+      `,
+      [req.user.organizationId, leaveId]
+    )
+
+    if (!instance.rows[0]) {
+      return sendSuccess(res, {
+        leaveId,
+        workflow: null,
+        actions: [],
+      })
+    }
+
+    const actions = await pool.query(
+      `
+        SELECT
+          wa.id,
+          wa.step_no AS "stepNo",
+          wa.actor_user_id AS "actorUserId",
+          u.name AS "actorName",
+          wa.action,
+          wa.from_state AS "fromState",
+          wa.to_state AS "toState",
+          wa.comments,
+          wa.created_at AS "createdAt"
+        FROM workflow_actions wa
+        LEFT JOIN users u ON u.id = wa.actor_user_id
+        WHERE wa.instance_id = $1
+        ORDER BY wa.step_no ASC
+      `,
+      [instance.rows[0].id]
+    )
+
+    return sendSuccess(res, {
+      leaveId,
+      workflow: instance.rows[0],
+      actions: actions.rows,
+    })
+  } catch (_error) {
+    return sendError(res, 'SERVER_ERROR', 'Failed to fetch leave workflow details', {}, 500)
   }
 }

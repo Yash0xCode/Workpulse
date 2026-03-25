@@ -79,7 +79,7 @@
 - [ ] Workflow Engine (generic, multi-step approval)
 - [x] Notification System (email, in-app, webhooks)
 - [x] Leave Allocation & Balance Tracking
-- [ ] Leave Approval Workflow
+- [x] Leave Approval Workflow
 - [x] Attendance Status Calculation
 - [x] Attendance Analytics
 
@@ -101,6 +101,11 @@ Leave allocation verification note (Mar 25, 2026):
 - Added policy-backed leave allocation defaults and carry-forward caps with endpoints `GET/PUT /api/leaves/policies`.
 - Added year bootstrap endpoint `POST /api/leaves/balances/initialize-year` for employee-level or org-wide balance initialization.
 - Leave submission now validates requested days against available balance before creating a pending request.
+
+Leave approval workflow verification note (Mar 25, 2026):
+- Approval authorization now enforces manager scope (department managers can approve only direct reports) while HR/admin retain org-level approval access.
+- Rejections require reviewer comments for auditable decision trails.
+- Added leave workflow timeline endpoint `GET /api/leaves/:id/workflow` and wired workflow visibility in leave UI.
 
 ### P2 - Core Modules (Weeks 8-12)
 - [ ] Payroll System (salary structure, slips, tax)
