@@ -141,4 +141,69 @@ function EmployeeModal({ mode = 'add', employee, departments, statuses, onClose,
               <label className="checkbox" htmlFor="faceEnrollmentEnabled">
                 <input
                   id="faceEnrollmentEnabled"
-                
+                  type="checkbox"
+                  checked={values.faceEnrollmentEnabled}
+                  onChange={(event) => updateField('faceEnrollmentEnabled', event.target.checked)}
+                />
+                <span>Enroll face profile for future attendance verification</span>
+              </label>
+
+              {values.faceEnrollmentEnabled && (
+                <>
+                  <Input
+                    id="faceEmbeddingDistance"
+                    label="Embedding Distance"
+                    placeholder="0.35"
+                    value={values.faceEmbeddingDistance}
+                    onChange={(event) => updateField('faceEmbeddingDistance', event.target.value)}
+                  />
+                  {errors.faceEmbeddingDistance && <span className="field-error">{errors.faceEmbeddingDistance}</span>}
+
+                  <Input
+                    id="faceLivenessScore"
+                    label="Liveness Score"
+                    placeholder="0.85"
+                    value={values.faceLivenessScore}
+                    onChange={(event) => updateField('faceLivenessScore', event.target.value)}
+                  />
+                  {errors.faceLivenessScore && <span className="field-error">{errors.faceLivenessScore}</span>}
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={submitting}
+            onClick={() => {
+              if (validate()) {
+                onSubmit?.({
+                  ...values,
+                  role: values.designation,
+                  designation: values.designation,
+                  skills: values.skills
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                  faceEnrollment: {
+                    enabled: values.faceEnrollmentEnabled,
+                    embeddingDistance: Number(values.faceEmbeddingDistance),
+                    livenessScore: Number(values.faceLivenessScore),
+                  },
+                })
+              }
+            }}
+          >
+            {submitting ? 'Saving...' : mode === 'add' ? 'Add employee' : 'Save changes'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default EmployeeModal
