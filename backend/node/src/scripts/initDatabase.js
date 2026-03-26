@@ -26,6 +26,8 @@ const permissions = [
   ['assign_task', 'Assign tasks to users'],
   ['view_analytics', 'View analytics dashboards'],
   ['view_team_attendance', 'View team attendance reports'],
+    ['view_payroll', 'View payroll cycles and entries'],
+    ['manage_payroll', 'Create payroll cycles and post payroll entries'],
 ];
 
 const rolePermissions = {
@@ -41,6 +43,8 @@ const rolePermissions = {
     'assign_task',
     'view_analytics',
     'view_team_attendance',
+     'view_payroll',
+     'manage_payroll',
   ],
   department_manager: [
     'view_employees',
@@ -52,6 +56,8 @@ const rolePermissions = {
     'assign_task',
     'view_analytics',
     'view_team_attendance',
+     'view_payroll',
+     'manage_payroll',
   ],
   employee: ['view_employees', 'apply_leave', 'view_leaves'],
   recruiter: ['add_employee', 'edit_employee'],

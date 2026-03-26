@@ -11,6 +11,7 @@ import Leave from './pages/Leave/Leave.jsx'
 import WorkflowCenter from './pages/Workflows/WorkflowCenter.jsx'
 import ManagerDashboard from './pages/Manager/ManagerDashboard.jsx'
 import Analytics from './pages/Analytics/Analytics.jsx'
+import Payroll from './pages/Payroll/Payroll.jsx'
 import { getMe, logout } from './services/authService.js'
 
 function App() {
@@ -98,9 +99,10 @@ function App() {
         {appPage === 'tasks' && <Tasks token={token} user={user} />}
         {appPage === 'attendance' && <Attendance token={token} user={user} />}
         {appPage === 'leave' && <Leave token={token} user={user} />}
+        {appPage === 'payroll' && <Payroll token={token} user={user} />}
         {appPage === 'workflows' && <WorkflowCenter token={token} user={user} />}
         {appPage === 'analytics' && <Analytics token={token} user={user} />}
-        {!['dashboard', 'manager', 'employees', 'tasks', 'attendance', 'leave', 'workflows', 'analytics'].includes(appPage) && (
+        {!['dashboard', 'manager', 'employees', 'tasks', 'attendance', 'leave', 'payroll', 'workflows', 'analytics'].includes(appPage) && (
           <div className="placeholder">
             <h2>Section in progress</h2>
             <p>We are crafting this workspace module with enterprise-grade UX patterns.</p>

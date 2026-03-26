@@ -113,11 +113,16 @@ Workflow engine verification note (Mar 25, 2026):
 - Workflow Center now supports quick definition creation, test instance creation, and action-based transitions.
 
 ### P2 - Core Modules (Weeks 8-12)
-- [ ] Payroll System (salary structure, slips, tax)
+- [x] Payroll System (salary structure, slips, tax)
 - [ ] Recruitment System (job openings, applicants, interviews, offers)
 - [ ] Performance Management (appraisals, goals, feedback)
 - [ ] Expense Claims Management
 - [ ] Onboarding/Offboarding Workflows
+
+Payroll verification note (Mar 26, 2026):
+- Added payroll run APIs (`GET /api/payroll/runs`, `POST /api/payroll/runs`, `GET /api/payroll/runs/:id`, `GET /api/payroll/runs/:id/entries`) with role-gated access.
+- Auto-generates payroll entries per employee from salary data with gross/net rollups; supports manual entry upsert for adjustments.
+- Frontend Payroll workspace lists runs, shows entries, and allows generating new runs by month/year.
 
 ### P3 - Interactive Features (Weeks 13-15)
 - [ ] Advanced Analytics Dashboards

@@ -8,6 +8,7 @@ import paginationMiddleware from './middleware/pagination.js';
 import sortingMiddleware from './middleware/sorting.js';
 import organizationContext from './middleware/organizationContext.js';
 import errorHandler from './middleware/errorHandler.js';
+import { ensurePayrollInfrastructure } from './services/payrollService.js';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ app.use(organizationContext);
 app.use('/api/employees', apiRoutes.employeeRoutes);
 app.use('/api/attendance', apiRoutes.attendanceRoutes);
 app.use('/api/leaves', apiRoutes.leaveRoutes);
+app.use('/api/payroll', apiRoutes.payrollRoutes);
 app.use('/api/workflows', apiRoutes.workflowRoutes);
 app.use('/api/tasks', apiRoutes.taskRoutes);
 app.use('/api/analytics', apiRoutes.analyticsRoutes);
@@ -69,6 +71,8 @@ const REQUIRED_TABLES = [
 	'workflow_instances',
 	'workflow_actions',
 	'notifications',
+	'payroll_runs',
+	'payroll_entries',
 ];
 
 async function verifyDatabaseReadiness() {
@@ -91,6 +95,7 @@ async function verifyDatabaseReadiness() {
 // Initialize database and start server
 async function initializeApp() {
 	try {
+		await ensurePayrollInfrastructure();
 		await verifyDatabaseReadiness();
 
 		const PORT = Number(process.env.PORT || 5000);

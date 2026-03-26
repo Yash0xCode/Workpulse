@@ -178,6 +178,13 @@ const ICONS = {
       <circle cx="12" cy="10" r="3" />
     </>
   ),
+  creditCard: (
+    <>
+      <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
+      <line x1="6" y1="16" x2="10" y2="16" />
+    </>
+  ),
 }
 
 export function Icon({ name, size = 18, className = '', strokeWidth = 2 }) {

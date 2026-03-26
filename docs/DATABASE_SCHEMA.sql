@@ -66,6 +66,38 @@ CREATE TABLE IF NOT EXISTS students (
   id SERIAL PRIMARY KEY,
   organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+
+CREATE TABLE IF NOT EXISTS payroll_runs (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  period_year INTEGER NOT NULL,
+  period_month INTEGER NOT NULL,
+  pay_date DATE,
+  status VARCHAR(30) NOT NULL DEFAULT 'draft',
+  total_employees INTEGER NOT NULL DEFAULT 0,
+  total_gross NUMERIC(14,2) NOT NULL DEFAULT 0,
+  total_deductions NUMERIC(14,2) NOT NULL DEFAULT 0,
+  total_net NUMERIC(14,2) NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, period_year, period_month)
+);
+
+CREATE TABLE IF NOT EXISTS payroll_entries (
+  id SERIAL PRIMARY KEY,
+  run_id INTEGER NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
+  employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  employee_name VARCHAR(255),
+  department VARCHAR(120),
+  gross_pay NUMERIC(14,2) NOT NULL DEFAULT 0,
+  deductions NUMERIC(14,2) NOT NULL DEFAULT 0,
+  net_pay NUMERIC(14,2) NOT NULL DEFAULT 0,
+  components JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (run_id, employee_id)
+);
   roll_no VARCHAR(50),
   course VARCHAR(120),
   semester INTEGER,
@@ -169,6 +201,42 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS payroll_runs (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  period_year INTEGER NOT NULL,
+  period_month INTEGER NOT NULL CHECK (period_month BETWEEN 1 AND 12),
+  pay_date DATE,
+  status VARCHAR(40) NOT NULL DEFAULT 'completed',
+  total_employees INTEGER DEFAULT 0,
+  total_gross NUMERIC(12,2) DEFAULT 0,
+  total_deductions NUMERIC(12,2) DEFAULT 0,
+  total_net NUMERIC(12,2) DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, period_year, period_month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_payroll_runs_org_period
+  ON payroll_runs(organization_id, period_year, period_month);
+
+CREATE TABLE IF NOT EXISTS payroll_entries (
+  id SERIAL PRIMARY KEY,
+  run_id INTEGER NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
+  employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  employee_name VARCHAR(255),
+  department VARCHAR(120),
+  gross_pay NUMERIC(12,2) DEFAULT 0,
+  deductions NUMERIC(12,2) DEFAULT 0,
+  net_pay NUMERIC(12,2) DEFAULT 0,
+  components JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_payroll_entries_run
+  ON payroll_entries(run_id);
 
 CREATE TABLE IF NOT EXISTS feedback (
   id SERIAL PRIMARY KEY,
