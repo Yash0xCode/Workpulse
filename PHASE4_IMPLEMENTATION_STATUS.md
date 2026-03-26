@@ -114,10 +114,15 @@ Workflow engine verification note (Mar 25, 2026):
 
 ### P2 - Core Modules (Weeks 8-12)
 - [x] Payroll System (salary structure, slips, tax)
-- [ ] Recruitment System (job openings, applicants, interviews, offers)
+- [x] Recruitment System (job openings, applicants, interviews, offers)
 - [ ] Performance Management (appraisals, goals, feedback)
 - [ ] Expense Claims Management
 - [ ] Onboarding/Offboarding Workflows
+
+Recruitment verification note (Mar 26, 2026):
+- Added recruitment APIs for job openings, applications, and status updates (`/api/recruitment/jobs`, `/api/recruitment/applications`).
+- Supports candidate creation per application, hiring pipeline statuses (applied → screening → interview → offer → hired/rejected).
+- Recruitment workspace lets HR/managers post jobs, add applicants, and advance statuses.
 
 Payroll verification note (Mar 26, 2026):
 - Added payroll run APIs (`GET /api/payroll/runs`, `POST /api/payroll/runs`, `GET /api/payroll/runs/:id`, `GET /api/payroll/runs/:id/entries`) with role-gated access.

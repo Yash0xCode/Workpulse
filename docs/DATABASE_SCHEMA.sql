@@ -98,6 +98,42 @@ CREATE TABLE IF NOT EXISTS payroll_entries (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (run_id, employee_id)
 );
+
+CREATE TABLE IF NOT EXISTS job_openings (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL,
+  department VARCHAR(120),
+  location VARCHAR(255),
+  description TEXT,
+  status VARCHAR(30) NOT NULL DEFAULT 'open',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS candidates (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255),
+  phone VARCHAR(50),
+  experience_years NUMERIC(4,1) DEFAULT 0,
+  skills JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS job_applications (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  job_id INTEGER NOT NULL REFERENCES job_openings(id) ON DELETE CASCADE,
+  candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  status VARCHAR(30) NOT NULL DEFAULT 'applied',
+  source VARCHAR(80),
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, job_id, candidate_id)
+);
   roll_no VARCHAR(50),
   course VARCHAR(120),
   semester INTEGER,

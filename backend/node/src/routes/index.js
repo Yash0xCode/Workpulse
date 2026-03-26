@@ -4,6 +4,7 @@ import authRoutes from './authRoutes.js';
 import employeeRoutes from './employeeRoutes.js';
 import leaveRoutes from './leaveRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
+import recruitmentRoutes from './recruitmentRoutes.js';
 import payrollRoutes from './payrollRoutes.js';
 import studentRoutes from './studentRoutes.js';
 import taskRoutes from './taskRoutes.js';
@@ -19,5 +20,6 @@ export default {
   taskRoutes,
   analyticsRoutes,
   notificationRoutes,
+  recruitmentRoutes,
   payrollRoutes,
 };

@@ -12,6 +12,7 @@ import WorkflowCenter from './pages/Workflows/WorkflowCenter.jsx'
 import ManagerDashboard from './pages/Manager/ManagerDashboard.jsx'
 import Analytics from './pages/Analytics/Analytics.jsx'
 import Payroll from './pages/Payroll/Payroll.jsx'
+import Recruitment from './pages/Recruitment/Recruitment.jsx'
 import { getMe, logout } from './services/authService.js'
 
 function App() {
@@ -46,6 +47,7 @@ function App() {
       workflows: { title: 'Workflow Center', subtitle: 'Approval state and action history' },
       performance: { title: 'Performance', subtitle: 'Team analytics' },
       payroll: { title: 'Payroll', subtitle: 'Compensation management' },
+      recruitment: { title: 'Recruitment', subtitle: 'Jobs, applicants, interviews' },
       reports: { title: 'Reports', subtitle: 'Insights & exports' },
       settings: { title: 'Settings', subtitle: 'Organization controls' },
       students: { title: 'Students', subtitle: 'Academic directory' },
@@ -100,9 +102,10 @@ function App() {
         {appPage === 'attendance' && <Attendance token={token} user={user} />}
         {appPage === 'leave' && <Leave token={token} user={user} />}
         {appPage === 'payroll' && <Payroll token={token} user={user} />}
+        {appPage === 'recruitment' && <Recruitment token={token} user={user} />}
         {appPage === 'workflows' && <WorkflowCenter token={token} user={user} />}
         {appPage === 'analytics' && <Analytics token={token} user={user} />}
-        {!['dashboard', 'manager', 'employees', 'tasks', 'attendance', 'leave', 'payroll', 'workflows', 'analytics'].includes(appPage) && (
+        {!['dashboard', 'manager', 'employees', 'tasks', 'attendance', 'leave', 'payroll', 'recruitment', 'workflows', 'analytics'].includes(appPage) && (
           <div className="placeholder">
             <h2>Section in progress</h2>
             <p>We are crafting this workspace module with enterprise-grade UX patterns.</p>

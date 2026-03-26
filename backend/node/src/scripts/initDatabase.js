@@ -28,6 +28,8 @@ const permissions = [
   ['view_team_attendance', 'View team attendance reports'],
     ['view_payroll', 'View payroll cycles and entries'],
     ['manage_payroll', 'Create payroll cycles and post payroll entries'],
+  ['view_recruitment', 'View job openings and applications'],
+  ['manage_recruitment', 'Create job openings and advance candidates'],
 ];
 
 const rolePermissions = {
@@ -45,6 +47,8 @@ const rolePermissions = {
     'view_team_attendance',
      'view_payroll',
      'manage_payroll',
+    'view_recruitment',
+    'manage_recruitment',
   ],
   department_manager: [
     'view_employees',
@@ -58,6 +62,7 @@ const rolePermissions = {
     'view_team_attendance',
      'view_payroll',
      'manage_payroll',
+    'view_recruitment',
   ],
   employee: ['view_employees', 'apply_leave', 'view_leaves'],
   recruiter: ['add_employee', 'edit_employee'],
