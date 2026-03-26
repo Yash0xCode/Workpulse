@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import Button from '../../components/common/Button.jsx'
 import { createPayrollRun, getPayrollEntries, getPayrollRun, getPayrollRuns, upsertPayrollEntry } from '../../services/payrollService.js'
 
 const currentYear = new Date().getFullYear()
@@ -140,9 +141,9 @@ function Payroll({ token = '' }) {
               onChange={(e) => setForm((p) => ({ ...p, payDate: e.target.value }))}
             />
           </label>
-          <button type="button" className="btn btn-primary" onClick={handleCreateRun} disabled={busy}>
+          <Button onClick={handleCreateRun} disabled={busy}>
             Generate Run
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -222,9 +223,9 @@ function Payroll({ token = '' }) {
                   onChange={(e) => setEntryForm((p) => ({ ...p, deductions: e.target.value }))}
                   style={{ width: 120 }}
                 />
-                <button type="button" className="btn btn-primary" onClick={handleUpsertEntry} disabled={busy || !entryForm.employeeId}>
+                <Button onClick={handleUpsertEntry} disabled={busy || !entryForm.employeeId}>
                   Add / Update Entry
-                </button>
+                </Button>
               </div>
             )}
             {entries.length === 0 && <div className="list-empty">Select or generate a payroll run to view entries.</div>}
