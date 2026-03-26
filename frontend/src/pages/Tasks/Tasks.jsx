@@ -4,7 +4,7 @@ import Input from '../../components/common/Input.jsx'
 import Select from '../../components/common/Select.jsx'
 import { PERMISSIONS, hasPermission } from '../../constants/rbac.js'
 import { tasksByColumn } from '../../constants/tasks.js'
-import { getEmployees, getTeamEmployees } from '../../services/employeeService.js'
+import { getEmployees, getEmployeeStress, getStressSuggestions, getTeamEmployees } from '../../services/employeeService.js'
 import { createTask, getTasks, updateTask } from '../../services/taskService.js'
 
 const columns = [
@@ -15,6 +15,9 @@ const columns = [
 ]
 
 const statusToColumn = { backlog: 'backlog', 'in-progress': 'progress', progress: 'progress', review: 'review', done: 'done' }
+
+const STRESS_DOT = { low: '🟢', medium: '🟡', high: '🔴' }
+const STRESS_LABEL = { low: 'Low stress', medium: 'Moderate stress', high: 'High stress' }
 
 function apiTasksToBoard(tasks) {
   const board = { backlog: [], progress: [], review: [], done: [] }
@@ -36,8 +39,11 @@ function Tasks({ token = '', user }) {
   const [dragging, setDragging] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [notice, setNotice] = useState('')
-  const [form, setForm] = useState({ title: '', assignee: '', dueDate: '', priority: 'Medium' })
+  const [form, setForm] = useState({ title: '', assignee: '', assigneeId: '', dueDate: '', priority: 'Medium' })
   const [employees, setEmployees] = useState([])
+  const [stressMap, setStressMap] = useState({})
+  const [selectedStress, setSelectedStress] = useState(null)
+  const [suggestions, setSuggestions] = useState([])
 
   const canAssign = hasPermission(user, PERMISSIONS.ASSIGN_TASK)
 
@@ -62,7 +68,51 @@ function Tasks({ token = '', user }) {
       })
       .catch(() => {})
     return () => { mounted = false }
-  }, [token, canAssign, user?.role]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [token, canAssign, user?.role])
+
+  // Fetch stress for each employee when list changes
+  useEffect(() => {
+    if (!canAssign || employees.length === 0) return
+    let mounted = true
+    const fetchStress = async () => {
+      const results = {}
+      await Promise.all(
+        employees.map(async (emp) => {
+          try {
+            const res = await getEmployeeStress(emp.id, token)
+            if (res?.data) results[emp.id] = res.data
+          } catch {
+            // ignore per-employee failures
+          }
+        })
+      )
+      if (mounted) setStressMap(results)
+    }
+    fetchStress()
+    return () => { mounted = false }
+  }, [employees, token, canAssign])
+
+  const handleAssigneeChange = async (event) => {
+    const name = event.target.value
+    const emp = employees.find((e) => (e.name || e.full_name) === name)
+    setForm((prev) => ({ ...prev, assignee: name, assigneeId: emp?.id || '' }))
+    setSelectedStress(null)
+    setSuggestions([])
+    if (!emp?.id) return
+
+    const stress = stressMap[emp.id]
+    if (stress) {
+      setSelectedStress(stress)
+      if (stress.stressLevel === 'high') {
+        try {
+          const res = await getStressSuggestions(token, emp.id)
+          if (Array.isArray(res?.data)) setSuggestions(res.data)
+        } catch {
+          setSuggestions([])
+        }
+      }
+    }
+  }
 
   const totals = useMemo(
     () =>
@@ -118,7 +168,9 @@ function Tasks({ token = '', user }) {
       setBoard((prev) => ({ ...prev, backlog: [task, ...prev.backlog] }))
       setNotice('Task created successfully.')
       setShowCreate(false)
-      setForm({ title: '', assignee: '', dueDate: '', priority: 'Medium' })
+      setForm({ title: '', assignee: '', assigneeId: '', dueDate: '', priority: 'Medium' })
+      setSelectedStress(null)
+      setSuggestions([])
     } catch (error) {
       setNotice(error.message || 'Unable to create task.')
     }
@@ -159,16 +211,37 @@ function Tasks({ token = '', user }) {
           </div>
           <div className="grid-2">
             {employees.length > 0 ? (
-              <Select
-                id="taskAssignee"
-                label="Assign To"
-                options={[
-                  { label: 'Select employee…', value: '' },
-                  ...employees.map((e) => ({ label: e.name || e.full_name || 'Unknown', value: e.name || e.full_name || '' })),
-                ]}
-                value={form.assignee}
-                onChange={(event) => setForm((prev) => ({ ...prev, assignee: event.target.value }))}
-              />
+              <div className="input-group">
+                <Select
+                  id="taskAssignee"
+                  label="Assign To"
+                  options={[
+                    { label: 'Select employee…', value: '' },
+                    ...employees.map((e) => {
+                      const name = e.name || e.full_name || 'Unknown'
+                      const stress = stressMap[e.id]
+                      const dot = stress ? (STRESS_DOT[stress.stressLevel] || '') : ''
+                      return { label: `${dot} ${name}`.trim(), value: name }
+                    }),
+                  ]}
+                  value={form.assignee}
+                  onChange={handleAssigneeChange}
+                />
+                {selectedStress && (
+                  <div className={`stress-indicator stress-indicator--${selectedStress.stressLevel}`}>
+                    <span className="stress-dot">{STRESS_DOT[selectedStress.stressLevel]}</span>
+                    <span className="stress-text">
+                      {STRESS_LABEL[selectedStress.stressLevel]}
+                      {' '}(score: {(selectedStress.stressScore * 100).toFixed(0)}%)
+                    </span>
+                  </div>
+                )}
+                {selectedStress?.stressLevel === 'high' && (
+                  <div className="stress-warning">
+                    ⚠️ <strong>High stress detected.</strong> Assigning more work may impact performance and increase burnout risk.
+                  </div>
+                )}
+              </div>
             ) : (
               <Input
                 id="taskAssignee"
@@ -190,8 +263,32 @@ function Tasks({ token = '', user }) {
               onChange={(event) => setForm((prev) => ({ ...prev, priority: event.target.value }))}
             />
           </div>
+
+          {suggestions.length > 0 && (
+            <div className="stress-suggestions">
+              <p className="stress-suggestions-title">💡 Suggested employees (lower stress, fewer tasks):</p>
+              <div className="stress-suggestions-list">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.employeeId}
+                    type="button"
+                    className="stress-suggestion-chip"
+                    onClick={() => {
+                      setForm((prev) => ({ ...prev, assignee: s.name, assigneeId: s.employeeId }))
+                      setSelectedStress({ stressLevel: s.stressLevel, stressScore: s.stressScore })
+                      setSuggestions([])
+                    }}
+                  >
+                    {STRESS_DOT[s.stressLevel]} {s.name}
+                    <span className="suggestion-meta">{s.activeTaskCount} task{s.activeTaskCount !== 1 ? 's' : ''}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="form-actions">
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowCreate(false); setSelectedStress(null); setSuggestions([]) }}>Cancel</Button>
             <Button onClick={handleCreateTask}>Save Task</Button>
           </div>
         </div>

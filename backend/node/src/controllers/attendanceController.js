@@ -1,5 +1,7 @@
 import { pool } from '../config/db.js'
 
+const ML_API_BASE_URL = process.env.ML_API_URL || 'http://localhost:8001'
+
 const attendanceSelect = `
   SELECT
     a.id,
@@ -348,5 +350,88 @@ export const getAttendanceStatusList = async (req, res) => {
     return res.json({ data: statuses })
   } catch (_error) {
     return res.status(500).json({ message: 'Failed to fetch attendance status list' })
+  }
+}
+
+export const registerFaceForAttendance = async (req, res) => {
+  try {
+    const userId = Number(req.body.userId || req.user?.id)
+    const organizationId = req.user?.organizationId
+    const { embeddingDistance, livenessScore } = req.body
+
+    if (embeddingDistance === undefined || livenessScore === undefined) {
+      return res.status(400).json({ message: 'embeddingDistance and livenessScore are required' })
+    }
+
+    const { rows: empRows } = await pool.query(
+      'SELECT id FROM employees WHERE user_id = $1 AND organization_id = $2 LIMIT 1',
+      [userId, organizationId]
+    )
+    if (!empRows[0]) {
+      return res.status(404).json({ message: 'Employee record not found' })
+    }
+    const employeeId = empRows[0].id
+
+    let enrollment = null
+    try {
+      const mlResponse = await fetch(`${ML_API_BASE_URL}/ml/face-enroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: employeeId,
+          embedding_distance: Number(embeddingDistance),
+          liveness_score: Number(livenessScore),
+        }),
+      })
+      const mlPayload = await mlResponse.json().catch(() => ({}))
+      if (mlPayload?.data) enrollment = mlPayload.data
+    } catch (_mlError) {
+      const isLive = livenessScore >= 0.7
+      const enrolled = isLive && embeddingDistance <= 0.5
+      enrollment = {
+        status: enrolled ? 'enrolled' : 'pending',
+        confidence: Math.max(0, Math.min(1, 1 - embeddingDistance)),
+        is_live: isLive,
+        enrolled,
+      }
+    }
+
+    await pool.query(
+      `INSERT INTO employee_face_profiles (
+         organization_id, employee_id, enrollment_status,
+         embedding_distance, liveness_score, verification_confidence,
+         enrolled_at, last_verified_at, metadata, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $7::jsonb, CURRENT_TIMESTAMP)
+       ON CONFLICT (organization_id, employee_id) DO UPDATE SET
+         enrollment_status = EXCLUDED.enrollment_status,
+         embedding_distance = EXCLUDED.embedding_distance,
+         liveness_score = EXCLUDED.liveness_score,
+         verification_confidence = EXCLUDED.verification_confidence,
+         last_verified_at = CURRENT_TIMESTAMP,
+         metadata = EXCLUDED.metadata,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        organizationId,
+        employeeId,
+        enrollment.status,
+        Number(embeddingDistance),
+        Number(livenessScore),
+        Number(enrollment.confidence || 0),
+        JSON.stringify({ source: 'attendance_register', enrolled: Boolean(enrollment.enrolled), isLive: Boolean(enrollment.is_live) }),
+      ]
+    )
+
+    return res.json({
+      data: {
+        employeeId,
+        enrollmentStatus: enrollment.status,
+        confidence: enrollment.confidence,
+        isLive: enrollment.is_live,
+        enrolled: enrollment.enrolled,
+      },
+    })
+  } catch (_error) {
+    return res.status(500).json({ message: 'Failed to register face' })
   }
 }

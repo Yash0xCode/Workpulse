@@ -8,3 +8,4 @@ export const getAttendanceSummary = (token) => nodeGet('/attendance/summary', to
 export const getAttendanceStatusList = (token, date) =>
 	nodeGet(`/attendance/status${date ? `?date=${encodeURIComponent(date)}` : ''}`, token)
 export const verifyFaceAttendance = (body, token) => mlPost('/ml/face-attendance', body, token)
+export const registerFace = (body, token) => nodePost('/attendance/face-register', body, token)

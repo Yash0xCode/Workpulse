@@ -5,6 +5,7 @@ from ai.attrition_model import AttritionInput, AttritionModel
 from ai.face_attendance_model import FaceAttendanceInput, FaceAttendanceModel, FaceEnrollmentInput
 from ai.productivity_model import ProductivityInput, ProductivityModel
 from ai.resume_screening_model import ResumeInput, ResumeScreeningModel
+from ai.stress_model import StressInput, StressModel
 from ai.student_performance_model import StudentPerformanceInput, StudentPerformanceModel
 
 app = FastAPI(title='WorkPulse ML API', version='1.0.0')
@@ -14,6 +15,7 @@ productivity_model = ProductivityModel()
 student_model = StudentPerformanceModel()
 resume_model = ResumeScreeningModel()
 face_model = FaceAttendanceModel()
+stress_model = StressModel()
 
 
 class AttritionPayload(BaseModel):
@@ -55,6 +57,13 @@ class FaceEnrollmentPayload(BaseModel):
 	liveness_score: float
 
 
+class StressPayload(BaseModel):
+	avg_work_hours_daily: float
+	task_count: int
+	attendance_rate: float
+	leave_days_taken: int
+
+
 @app.get('/ml/health')
 def health():
 	return {'status': 'ok', 'service': 'workpulse-ml-api'}
@@ -93,4 +102,10 @@ def verify_face(payload: FaceAttendancePayload):
 @app.post('/ml/face-enroll')
 def enroll_face(payload: FaceEnrollmentPayload):
 	result = face_model.enroll(FaceEnrollmentInput(**payload.model_dump()))
+	return {'data': result}
+
+
+@app.post('/ml/stress')
+def predict_stress(payload: StressPayload):
+	result = stress_model.predict(StressInput(**payload.model_dump()))
 	return {'data': result}
