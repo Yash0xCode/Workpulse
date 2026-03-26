@@ -418,3 +418,245 @@ export const deleteEmployee = async (req, res) => {
     return sendError(res, 'SERVER_ERROR', 'Failed to delete employee', {}, 500)
   }
 }
+
+export const getEmployeeStress = async (req, res) => {
+  try {
+    const employeeId = Number(req.params.id)
+    const organizationId = req.user.organizationId
+
+    // Fetch stress record if it exists
+    const { rows } = await pool.query(
+      `SELECT * FROM employee_stress WHERE employee_id = $1 AND organization_id = $2 LIMIT 1`,
+      [employeeId, organizationId]
+    )
+
+    if (rows[0]) {
+      return sendSuccess(res, {
+        employeeId,
+        stressScore: Number(rows[0].stress_score),
+        stressLevel: rows[0].stress_level,
+        avgWorkHoursDaily: Number(rows[0].avg_work_hours_daily || 0),
+        taskCount: rows[0].task_count,
+        attendanceRate: Number(rows[0].attendance_rate || 0),
+        leaveDaysTaken: rows[0].leave_days_taken,
+        lastUpdated: rows[0].last_updated,
+      })
+    }
+
+    // Compute on-the-fly from live data
+    const today = new Date().toISOString().slice(0, 10)
+    const monthStart = today.slice(0, 8) + '01'
+
+    const [taskRes, attendanceRes, leaveRes] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS task_count FROM tasks WHERE assigned_to_employee_id = $1 AND organization_id = $2 AND status NOT IN ('done', 'completed')`,
+        [employeeId, organizationId]
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*)::int AS total_days,
+           SUM(CASE WHEN status IN ('present', 'half_day', 'in_progress') THEN 1 ELSE 0 END)::int AS present_days,
+           AVG(EXTRACT(EPOCH FROM (check_out_time - check_in_time)) / 3600)::float AS avg_hours
+         FROM attendance_logs
+         WHERE user_id = (SELECT user_id FROM employees WHERE id = $1 LIMIT 1)
+           AND organization_id = $2
+           AND attendance_date >= $3::date
+           AND check_in_time IS NOT NULL`,
+        [employeeId, organizationId, monthStart]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS leave_days
+         FROM leaves
+         WHERE employee_id = $1
+           AND organization_id = $2
+           AND status = 'approved'
+           AND from_date >= $3::date`,
+        [employeeId, organizationId, monthStart]
+      ),
+    ])
+
+    const taskCount = taskRes.rows[0]?.task_count ?? 0
+    const totalDays = attendanceRes.rows[0]?.total_days ?? 0
+    const presentDays = attendanceRes.rows[0]?.present_days ?? 0
+    const avgHours = attendanceRes.rows[0]?.avg_hours ?? 8.0
+    const attendanceRate = totalDays > 0 ? (presentDays / totalDays) * 100 : 90
+    const leaveDays = leaveRes.rows[0]?.leave_days ?? 0
+
+    // Call ML service
+    let stressScore = 0
+    let stressLevel = 'low'
+    try {
+      const mlResponse = await fetch(`${ML_API_BASE_URL}/ml/stress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          avg_work_hours_daily: Number((avgHours || 8.0).toFixed(2)),
+          task_count: taskCount,
+          attendance_rate: Number(attendanceRate.toFixed(2)),
+          leave_days_taken: leaveDays,
+        }),
+      })
+      const mlPayload = await mlResponse.json().catch(() => ({}))
+      if (mlPayload?.data) {
+        stressScore = mlPayload.data.stress_score
+        stressLevel = mlPayload.data.stress_level
+      }
+    } catch (_mlError) {
+      // Fallback heuristic
+      const hourPenalty = Math.max(0, avgHours - 8) * 0.08
+      const taskPenalty = Math.min(1, taskCount / 15) * 0.4
+      const attendancePenalty = Math.max(0, (100 - attendanceRate) / 100) * 0.2
+      stressScore = Math.min(1, hourPenalty + taskPenalty + attendancePenalty)
+      stressLevel = stressScore >= 0.6 ? 'high' : stressScore >= 0.3 ? 'medium' : 'low'
+    }
+
+    // Cache in DB
+    await pool.query(
+      `INSERT INTO employee_stress (organization_id, employee_id, stress_score, stress_level, avg_work_hours_daily, task_count, attendance_rate, leave_days_taken, last_updated)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+       ON CONFLICT (organization_id, employee_id) DO UPDATE SET
+         stress_score = EXCLUDED.stress_score,
+         stress_level = EXCLUDED.stress_level,
+         avg_work_hours_daily = EXCLUDED.avg_work_hours_daily,
+         task_count = EXCLUDED.task_count,
+         attendance_rate = EXCLUDED.attendance_rate,
+         leave_days_taken = EXCLUDED.leave_days_taken,
+         last_updated = CURRENT_TIMESTAMP`,
+      [organizationId, employeeId, stressScore, stressLevel, avgHours ?? 8.0, taskCount, attendanceRate, leaveDays]
+    ).catch(() => {})
+
+    return sendSuccess(res, {
+      employeeId,
+      stressScore,
+      stressLevel,
+      avgWorkHoursDaily: avgHours ?? 8.0,
+      taskCount,
+      attendanceRate,
+      leaveDaysTaken: leaveDays,
+      lastUpdated: new Date().toISOString(),
+    })
+  } catch (_error) {
+    return sendError(res, 'SERVER_ERROR', 'Failed to calculate stress', {}, 500)
+  }
+}
+
+export const getStressSuggestions = async (req, res) => {
+  try {
+    const organizationId = req.user.organizationId
+    const excludeEmployeeId = req.query.excludeId ? Number(req.query.excludeId) : null
+
+    // Build parameterized query, optionally excluding an employee by id
+    const params = [organizationId]
+    let excludeClause = ''
+    if (excludeEmployeeId) {
+      params.push(excludeEmployeeId)
+      excludeClause = `AND e.id != $${params.length}`
+    }
+
+    // Get all employees with their stress data and active task counts
+    const { rows } = await pool.query(
+      `SELECT
+         e.id AS "employeeId",
+         e.name,
+         e.department,
+         e.designation,
+         COALESCE(es.stress_score, 0) AS "stressScore",
+         COALESCE(es.stress_level, 'low') AS "stressLevel",
+         COUNT(t.id)::int AS "activeTaskCount"
+       FROM employees e
+       LEFT JOIN employee_stress es ON es.employee_id = e.id AND es.organization_id = e.organization_id
+       LEFT JOIN tasks t ON t.assigned_to_employee_id = e.id
+         AND t.organization_id = e.organization_id
+         AND t.status NOT IN ('done', 'completed')
+       WHERE e.organization_id = $1
+         AND e.status = 'Active'
+         ${excludeClause}
+       GROUP BY e.id, e.name, e.department, e.designation, es.stress_score, es.stress_level
+       ORDER BY COALESCE(es.stress_score, 0) ASC, COUNT(t.id) ASC
+       LIMIT 3`,
+      params
+    )
+
+    return sendSuccess(res, rows)
+  } catch (_error) {
+    return sendError(res, 'SERVER_ERROR', 'Failed to fetch suggestions', {}, 500)
+  }
+}
+
+export const registerFace = async (req, res) => {
+  try {
+    const employeeId = Number(req.params.id)
+    const organizationId = req.user.organizationId
+
+    const { embeddingDistance, livenessScore } = req.body
+    if (embeddingDistance === undefined || livenessScore === undefined) {
+      return sendError(res, 'VALIDATION_ERROR', 'embeddingDistance and livenessScore are required', {}, 400)
+    }
+
+    const { rows: empRows } = await pool.query(
+      'SELECT id FROM employees WHERE id = $1 AND organization_id = $2 LIMIT 1',
+      [employeeId, organizationId]
+    )
+    if (!empRows[0]) return sendError(res, 'NOT_FOUND', 'Employee not found', {}, 404)
+
+    let enrollment = null
+    try {
+      const mlResponse = await fetch(`${ML_API_BASE_URL}/ml/face-enroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: employeeId,
+          embedding_distance: Number(embeddingDistance),
+          liveness_score: Number(livenessScore),
+        }),
+      })
+      const mlPayload = await mlResponse.json().catch(() => ({}))
+      if (mlPayload?.data) enrollment = mlPayload.data
+    } catch (_mlError) {
+      const isLive = livenessScore >= 0.7
+      const enrolled = isLive && embeddingDistance <= 0.5
+      enrollment = {
+        status: enrolled ? 'enrolled' : 'pending',
+        confidence: Math.max(0, Math.min(1, 1 - embeddingDistance)),
+        is_live: isLive,
+        enrolled,
+      }
+    }
+
+    await pool.query(
+      `INSERT INTO employee_face_profiles (
+         organization_id, employee_id, enrollment_status,
+         embedding_distance, liveness_score, verification_confidence,
+         enrolled_at, last_verified_at, metadata, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $7::jsonb, CURRENT_TIMESTAMP)
+       ON CONFLICT (organization_id, employee_id) DO UPDATE SET
+         enrollment_status = EXCLUDED.enrollment_status,
+         embedding_distance = EXCLUDED.embedding_distance,
+         liveness_score = EXCLUDED.liveness_score,
+         verification_confidence = EXCLUDED.verification_confidence,
+         last_verified_at = CURRENT_TIMESTAMP,
+         metadata = EXCLUDED.metadata,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        organizationId,
+        employeeId,
+        enrollment.status,
+        Number(embeddingDistance),
+        Number(livenessScore),
+        Number(enrollment.confidence || 0),
+        JSON.stringify({ source: 'face_register', enrolled: Boolean(enrollment.enrolled), isLive: Boolean(enrollment.is_live) }),
+      ]
+    )
+
+    return sendSuccess(res, {
+      employeeId,
+      enrollmentStatus: enrollment.status,
+      confidence: enrollment.confidence,
+      isLive: enrollment.is_live,
+      enrolled: enrollment.enrolled,
+    })
+  } catch (_error) {
+    return sendError(res, 'SERVER_ERROR', 'Failed to register face', {}, 500)
+  }
+}

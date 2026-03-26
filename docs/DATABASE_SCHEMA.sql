@@ -221,6 +221,21 @@ CREATE TABLE IF NOT EXISTS employee_face_profiles (
   UNIQUE (organization_id, employee_id)
 );
 
+CREATE TABLE IF NOT EXISTS employee_stress (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  stress_score NUMERIC(5,3) NOT NULL DEFAULT 0,
+  stress_level VARCHAR(20) NOT NULL DEFAULT 'low',
+  avg_work_hours_daily NUMERIC(5,2),
+  task_count INTEGER DEFAULT 0,
+  attendance_rate NUMERIC(5,2),
+  leave_days_taken INTEGER DEFAULT 0,
+  last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, employee_id)
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
   id SERIAL PRIMARY KEY,
   organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
