@@ -22,6 +22,7 @@ const NAV_SECTIONS = [
       { label: 'Attendance', key: 'attendance', icon: 'clock', roles: ['super_admin', 'hr_manager', 'department_manager', 'employee', 'institute_admin', 'faculty', 'student'] },
       { label: 'Leave', key: 'leave', icon: 'calendar', roles: ['super_admin', 'hr_manager', 'department_manager', 'employee', 'institute_admin', 'faculty'] },
         { label: 'Recruitment', key: 'recruitment', icon: 'briefcase', roles: ['super_admin', 'hr_manager', 'department_manager', 'recruiter', 'institute_admin'] },
+      { label: 'Performance', key: 'performance', icon: 'award', roles: ['super_admin', 'hr_manager', 'department_manager', 'institute_admin'] },
       { label: 'Workflows', key: 'workflows', icon: 'activity', roles: ['super_admin', 'hr_manager', 'department_manager', 'employee', 'institute_admin', 'faculty', 'student'] },
       { label: 'Tasks', key: 'tasks', icon: 'tasks', roles: ALL_ROLES },
         { label: 'Payroll', key: 'payroll', icon: 'creditCard', roles: ['super_admin', 'hr_manager', 'department_manager', 'institute_admin'] },

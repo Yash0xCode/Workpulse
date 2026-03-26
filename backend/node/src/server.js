@@ -10,6 +10,7 @@ import organizationContext from './middleware/organizationContext.js';
 import errorHandler from './middleware/errorHandler.js';
 import { ensurePayrollInfrastructure } from './services/payrollService.js';
 import { ensureRecruitmentInfrastructure } from './services/recruitmentService.js';
+import { ensurePerformanceInfrastructure } from './services/performanceService.js';
 
 dotenv.config();
 
@@ -52,6 +53,7 @@ app.use('/api/workflows', apiRoutes.workflowRoutes);
 app.use('/api/tasks', apiRoutes.taskRoutes);
 app.use('/api/analytics', apiRoutes.analyticsRoutes);
 app.use('/api/notifications', apiRoutes.notificationRoutes);
+app.use('/api/performance', apiRoutes.performanceRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -78,6 +80,9 @@ const REQUIRED_TABLES = [
 	'job_openings',
 	'candidates',
 	'job_applications',
+	'performance_goals',
+	'performance_reviews',
+	'performance_feedback',
 ];
 
 async function verifyDatabaseReadiness() {
@@ -102,6 +107,7 @@ async function initializeApp() {
 	try {
 		await ensurePayrollInfrastructure();
 		await ensureRecruitmentInfrastructure();
+		await ensurePerformanceInfrastructure();
 		await verifyDatabaseReadiness();
 
 		const PORT = Number(process.env.PORT || 5000);

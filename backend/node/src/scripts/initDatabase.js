@@ -30,6 +30,8 @@ const permissions = [
     ['manage_payroll', 'Create payroll cycles and post payroll entries'],
   ['view_recruitment', 'View job openings and applications'],
   ['manage_recruitment', 'Create job openings and advance candidates'],
+  ['view_performance', 'View performance goals and reviews'],
+  ['manage_performance', 'Create and update performance goals and reviews'],
 ];
 
 const rolePermissions = {
@@ -49,6 +51,8 @@ const rolePermissions = {
      'manage_payroll',
     'view_recruitment',
     'manage_recruitment',
+    'view_performance',
+    'manage_performance',
   ],
   department_manager: [
     'view_employees',
@@ -63,9 +67,11 @@ const rolePermissions = {
      'view_payroll',
      'manage_payroll',
     'view_recruitment',
+    'view_performance',
+    'manage_performance',
   ],
   employee: ['view_employees', 'apply_leave', 'view_leaves'],
-  recruiter: ['add_employee', 'edit_employee'],
+  recruiter: ['add_employee', 'edit_employee', 'view_recruitment'],
   institute_admin: permissions.map((p) => p[0]),
   faculty: ['view_employees', 'apply_leave', 'view_leaves', 'assign_task', 'view_analytics'],
   student: ['apply_leave', 'view_leaves'],
