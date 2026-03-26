@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import Button from '../../components/common/Button.jsx'
 import { addFeedback, createGoal, createReview, listGoals, listReviews, updateGoal } from '../../services/performanceService.js'
 
 const goalStatuses = [
@@ -199,9 +200,9 @@ function Performance({ token = '', user }) {
                   onChange={(e) => setGoalForm((p) => ({ ...p, weight: e.target.value }))}
                   style={{ width: 110 }}
                 />
-                <button type="button" className="btn btn-primary" onClick={handleCreateGoal} disabled={busy || !goalForm.title || !goalForm.employeeId}>
+                <Button onClick={handleCreateGoal} disabled={busy || !goalForm.title || !goalForm.employeeId}>
                   Add Goal
-                </button>
+                </Button>
               </div>
             )}
 
@@ -273,9 +274,9 @@ function Performance({ token = '', user }) {
                         </td>
                         {managerView && (
                           <td>
-                            <button type="button" className="btn" onClick={() => handleUpdateGoal(goal.id)} disabled={busy}>
+                            <Button variant="outline" onClick={() => handleUpdateGoal(goal.id)} disabled={busy}>
                               Save
-                            </button>
+                            </Button>
                           </td>
                         )}
                       </tr>
@@ -332,9 +333,9 @@ function Performance({ token = '', user }) {
                     </option>
                   ))}
                 </select>
-                <button type="button" className="btn btn-primary" onClick={handleCreateReview} disabled={busy || !reviewForm.employeeId}>
+                <Button onClick={handleCreateReview} disabled={busy || !reviewForm.employeeId}>
                   Add Review
-                </button>
+                </Button>
               </div>
             )}
 
@@ -382,9 +383,9 @@ function Performance({ token = '', user }) {
                               value={feedbackNotes[review.id] || ''}
                               onChange={(e) => setFeedbackNotes((prev) => ({ ...prev, [review.id]: e.target.value }))}
                             />
-                            <button type="button" className="btn" onClick={() => handleAddFeedback(review.id)} disabled={busy || !feedbackNotes[review.id]}>
+                            <Button variant="outline" onClick={() => handleAddFeedback(review.id)} disabled={busy || !feedbackNotes[review.id]}>
                               Send
-                            </button>
+                            </Button>
                           </div>
                         ) : (
                           <span className="muted">Feedback restricted</span>

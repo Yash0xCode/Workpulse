@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import Button from '../../components/common/Button.jsx'
 import {
   createApplication,
   createJob,
@@ -143,9 +144,9 @@ function Recruitment({ token = '' }) {
               value={jobForm.location}
               onChange={(e) => setJobForm((p) => ({ ...p, location: e.target.value }))}
             />
-            <button type="button" className="btn btn-primary" onClick={handleCreateJob} disabled={busy || !jobForm.title}>
+            <Button onClick={handleCreateJob} disabled={busy || !jobForm.title}>
               Post Job
-            </button>
+            </Button>
           </div>
           <textarea
             rows={3}
@@ -220,9 +221,9 @@ function Recruitment({ token = '' }) {
                 value={candidateForm.source}
                 onChange={(e) => setCandidateForm((p) => ({ ...p, source: e.target.value }))}
               />
-              <button type="button" className="btn btn-primary" onClick={handleCreateApplication} disabled={busy || !candidateForm.jobId || !candidateForm.name}>
+              <Button onClick={handleCreateApplication} disabled={busy || !candidateForm.jobId || !candidateForm.name}>
                 Add Applicant
-              </button>
+              </Button>
             </div>
           )}
 

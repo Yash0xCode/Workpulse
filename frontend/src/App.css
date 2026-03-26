@@ -2447,3 +2447,316 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ═══════════════════════════════════════════════
+   UI CONSISTENCY – shared classes used by
+   Performance, Payroll, and Recruitment modules
+   ═══════════════════════════════════════════════ */
+
+/* ── Page Structure ─────────────────────────────── */
+.page-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-header h2 {
+  margin: 0 0 4px;
+  font-size: 1.35rem;
+}
+
+.page-header p {
+  margin: 0;
+  color: var(--wp-text-muted);
+  font-size: 0.875rem;
+}
+
+/* ── Card Components ────────────────────────────── */
+.card {
+  background: var(--wp-surface);
+  border: 1px solid var(--wp-border);
+  border-radius: 18px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--wp-border);
+}
+
+.card-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--wp-text);
+}
+
+.card-header > span {
+  font-size: 0.8rem;
+  color: var(--wp-text-muted);
+  font-weight: 500;
+}
+
+/* ── Inline Form ────────────────────────────────── */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.inline-form input,
+.inline-form select {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--wp-border);
+  background: var(--wp-surface);
+  color: var(--wp-text);
+  padding: 0 12px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+
+.inline-form input:focus,
+.inline-form select:focus {
+  border-color: var(--wp-primary);
+  box-shadow: 0 0 0 3px rgba(0, 106, 104, 0.15);
+}
+
+.inline-form input::placeholder {
+  color: var(--wp-text-faint);
+}
+
+.inline-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--wp-text-muted);
+}
+
+/* ── Error Banner ───────────────────────────────── */
+.error-banner {
+  padding: 10px 16px;
+  background: rgba(240, 68, 56, 0.08);
+  border: 1px solid rgba(240, 68, 56, 0.28);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: var(--wp-error);
+}
+
+/* ── Table Utilities ────────────────────────────── */
+.table-scroll {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--wp-border);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table thead {
+  background: var(--wp-bg);
+}
+
+.data-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--wp-text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--wp-border);
+}
+
+.data-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--wp-border);
+  color: var(--wp-text);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover td {
+  background: rgba(0, 106, 104, 0.04);
+}
+
+.data-table tfoot th {
+  padding: 12px 14px;
+  border-top: 2px solid var(--wp-border);
+  border-bottom: none;
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--wp-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Inputs/selects inside data-table cells */
+.data-table input,
+.data-table select {
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--wp-border);
+  background: var(--wp-surface);
+  color: var(--wp-text);
+  padding: 0 10px;
+  outline: none;
+  transition: border-color 0.2s ease;
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+
+.data-table input:focus,
+.data-table select:focus {
+  border-color: var(--wp-primary);
+  box-shadow: 0 0 0 3px rgba(0, 106, 104, 0.15);
+}
+
+.data-table input:disabled,
+.data-table select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── List Table ─────────────────────────────────── */
+.list-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--wp-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.list-table-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--wp-bg);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-text-muted);
+  border-bottom: 1px solid var(--wp-border);
+}
+
+.list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 14px;
+  border: none;
+  width: 100%;
+  border-bottom: 1px solid var(--wp-border);
+  background: var(--wp-surface);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.875rem;
+  color: var(--wp-text);
+  font-family: inherit;
+  font-weight: 500;
+  transition: background 0.18s ease;
+  gap: 8px;
+}
+
+.list-row:last-child {
+  border-bottom: none;
+}
+
+.list-row:hover {
+  background: rgba(0, 106, 104, 0.06);
+}
+
+.list-row.active {
+  background: rgba(0, 106, 104, 0.11);
+  color: var(--wp-primary);
+}
+
+.list-empty {
+  padding: 24px 14px;
+  text-align: center;
+  color: var(--wp-text-faint);
+  font-size: 0.85rem;
+}
+
+/* ── Status Pills ───────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: 0.02em;
+}
+
+.pill-green {
+  background: rgba(50, 213, 131, 0.12);
+  color: #0f7f44;
+}
+
+.pill-blue {
+  background: rgba(99, 102, 241, 0.1);
+  color: #4f46e5;
+}
+
+/* ── Muted Sub-text ─────────────────────────────── */
+.muted {
+  color: var(--wp-text-muted);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+/* ── Textarea (raw usage in Performance/Recruitment) */
+.card textarea,
+.page-section textarea {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--wp-border);
+  background: var(--wp-surface);
+  color: var(--wp-text);
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font-size: 0.875rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.card textarea:focus,
+.page-section textarea:focus {
+  border-color: var(--wp-primary);
+  box-shadow: 0 0 0 3px rgba(0, 106, 104, 0.15);
+}
+
+.card textarea::placeholder,
+.page-section textarea::placeholder {
+  color: var(--wp-text-faint);
+}
