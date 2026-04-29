@@ -3,6 +3,7 @@ import attendanceRoutes from './attendanceRoutes.js';
 import authRoutes from './authRoutes.js';
 import employeeRoutes from './employeeRoutes.js';
 import leaveRoutes from './leaveRoutes.js';
+import mlRoutes from './mlRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import recruitmentRoutes from './recruitmentRoutes.js';
 import payrollRoutes from './payrollRoutes.js';
@@ -24,4 +25,5 @@ export default {
   recruitmentRoutes,
   payrollRoutes,
   performanceRoutes,
+  mlRoutes,
 };
