@@ -1,4 +1,5 @@
 import { pool } from '../config/db.js'
+import { sendError } from '../utils/response.js'
 
 export const getAttendanceAnalytics = async (req, res) => {
   try {
@@ -186,7 +187,7 @@ export const getAttendanceAnalytics = async (req, res) => {
       },
     })
   } catch (_error) {
-    return res.status(500).json({ message: 'Failed to fetch attendance analytics' })
+    return sendError(res, 'SERVER_ERROR', 'Failed to fetch attendance analytics', {}, 500)
   }
 }
 
@@ -230,7 +231,7 @@ export const getProductivityAnalytics = async (req, res) => {
       },
     })
   } catch (_error) {
-    return res.status(500).json({ message: 'Failed to fetch productivity analytics' })
+    return sendError(res, 'SERVER_ERROR', 'Failed to fetch productivity analytics', {}, 500)
   }
 }
 
@@ -287,6 +288,6 @@ export const getPlacementAnalytics = async (req, res) => {
       },
     })
   } catch (_error) {
-    return res.status(500).json({ message: 'Failed to fetch placement analytics' })
+    return sendError(res, 'SERVER_ERROR', 'Failed to fetch placement analytics', {}, 500)
   }
 }

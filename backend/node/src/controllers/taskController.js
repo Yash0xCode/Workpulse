@@ -1,4 +1,5 @@
 import { pool } from '../config/db.js'
+import { sendError, sendSuccess } from '../utils/response.js'
 
 const taskSelect = `
   SELECT
@@ -12,7 +13,9 @@ const taskSelect = `
     COALESCE(t.priority, 'Medium') AS priority,
     COALESCE(t.status, 'backlog') AS status,
     t.due_date AS "dueDate",
-    COALESCE(t.department, assignee_employee.department, 'General') AS department
+    COALESCE(t.department, assignee_employee.department, 'General') AS department,
+    t.created_at AS "createdAt",
+    t.updated_at AS "updatedAt"
   FROM tasks t
   LEFT JOIN employees assignee_employee ON assignee_employee.id = t.assigned_to_employee_id
   LEFT JOIN users assignee_user ON assignee_user.id = t.assigned_to
@@ -26,39 +29,28 @@ const normalizeTask = (row) => ({
 const resolveAssignee = async (organizationId, assignedToEmployeeId, assigneeName) => {
   if (assignedToEmployeeId) {
     const { rows } = await pool.query(
-      `
-        SELECT id, user_id AS "userId", name, department
-        FROM employees
-        WHERE organization_id = $1 AND id = $2
-        LIMIT 1
-      `,
+      `SELECT id, user_id AS "userId", name, department
+       FROM employees
+       WHERE organization_id = $1 AND id = $2
+       LIMIT 1`,
       [organizationId, Number(assignedToEmployeeId)]
     )
     return rows[0] || null
   }
 
-  if (!assigneeName) {
-    return null
-  }
+  if (!assigneeName) return null
 
   const { rows } = await pool.query(
-    `
-      SELECT id, user_id AS "userId", name, department
-      FROM employees
-      WHERE organization_id = $1 AND LOWER(name) = LOWER($2)
-      LIMIT 1
-    `,
+    `SELECT id, user_id AS "userId", name, department
+     FROM employees
+     WHERE organization_id = $1 AND LOWER(name) = LOWER($2)
+     LIMIT 1`,
     [organizationId, assigneeName]
   )
-
   return rows[0] || null
 }
 
 export const createTask = async (req, res) => {
-  if (!req.body.title) {
-    return res.status(400).json({ message: 'title is required' })
-  }
-
   try {
     const assignee = await resolveAssignee(
       req.user.organizationId,
@@ -67,23 +59,11 @@ export const createTask = async (req, res) => {
     )
 
     const { rows } = await pool.query(
-      `
-        INSERT INTO tasks (
-          organization_id,
-          title,
-          description,
-          assigned_to,
-          assigned_by,
-          priority,
-          status,
-          due_date,
-          assigned_to_employee_id,
-          assignee_name,
-          department
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        RETURNING id
-      `,
+      `INSERT INTO tasks (
+         organization_id, title, description, assigned_to, assigned_by,
+         priority, status, due_date, assigned_to_employee_id, assignee_name, department
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING id`,
       [
         req.user.organizationId,
         req.body.title,
@@ -100,9 +80,9 @@ export const createTask = async (req, res) => {
     )
 
     const created = await pool.query(`${taskSelect} WHERE t.id = $1`, [rows[0].id])
-    return res.status(201).json({ data: normalizeTask(created.rows[0]) })
+    return sendSuccess(res, normalizeTask(created.rows[0]), {}, 201)
   } catch (_error) {
-    return res.status(500).json({ message: 'Failed to create task' })
+    return sendError(res, 'SERVER_ERROR', 'Failed to create task', {}, 500)
   }
 }
 
@@ -110,35 +90,31 @@ export const getTasks = async (req, res) => {
   try {
     if (req.query.view === 'team') {
       const { rows } = await pool.query(
-        `
-          WITH manager_record AS (
-            SELECT id
-            FROM employees
-            WHERE organization_id = $1 AND user_id = $2
-            LIMIT 1
-          )
-          ${taskSelect}
-          WHERE t.organization_id = $1
-            AND t.assigned_to_employee_id IN (
-              SELECT id
-              FROM employees
-              WHERE organization_id = $1
-                AND manager_id = (SELECT id FROM manager_record)
-            )
-          ORDER BY t.id DESC
-        `,
+        `WITH manager_record AS (
+           SELECT id FROM employees
+           WHERE organization_id = $1 AND user_id = $2
+           LIMIT 1
+         )
+         ${taskSelect}
+         WHERE t.organization_id = $1
+           AND t.assigned_to_employee_id IN (
+             SELECT id FROM employees
+             WHERE organization_id = $1
+               AND manager_id = (SELECT id FROM manager_record)
+           )
+         ORDER BY t.id DESC`,
         [req.user.organizationId, req.user.id]
       )
-      return res.json({ data: rows.map(normalizeTask) })
+      return sendSuccess(res, rows.map(normalizeTask))
     }
 
     const { rows } = await pool.query(
       `${taskSelect} WHERE t.organization_id = $1 ORDER BY t.id DESC`,
       [req.user.organizationId]
     )
-    return res.json({ data: rows.map(normalizeTask) })
+    return sendSuccess(res, rows.map(normalizeTask))
   } catch (_error) {
-    return res.status(500).json({ message: 'Failed to fetch tasks' })
+    return sendError(res, 'SERVER_ERROR', 'Failed to fetch tasks', {}, 500)
   }
 }
 
@@ -181,27 +157,42 @@ export const updateTask = async (req, res) => {
     }
 
     if (updates.length === 0) {
-      return res.status(400).json({ message: 'No valid fields provided for update' })
+      return sendError(res, 'VALIDATION_ERROR', 'No valid fields provided for update', {}, 400)
     }
 
     values.push(Number(req.params.id))
     values.push(req.user.organizationId)
 
     const result = await pool.query(
-      `
-        UPDATE tasks
-        SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $${values.length - 1} AND organization_id = $${values.length}
-        RETURNING id
-      `,
+      `UPDATE tasks
+       SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $${values.length - 1} AND organization_id = $${values.length}
+       RETURNING id`,
       values
     )
 
-    if (!result.rows[0]) return res.status(404).json({ message: 'Task not found' })
+    if (!result.rows[0]) return sendError(res, 'NOT_FOUND', 'Task not found', {}, 404)
 
     const updated = await pool.query(`${taskSelect} WHERE t.id = $1`, [result.rows[0].id])
-    return res.json({ data: normalizeTask(updated.rows[0]) })
+    return sendSuccess(res, normalizeTask(updated.rows[0]))
   } catch (_error) {
-    return res.status(500).json({ message: 'Failed to update task' })
+    return sendError(res, 'SERVER_ERROR', 'Failed to update task', {}, 500)
+  }
+}
+
+export const deleteTask = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM tasks
+       WHERE id = $1 AND organization_id = $2
+       RETURNING id`,
+      [Number(req.params.id), req.user.organizationId]
+    )
+
+    if (!result.rows[0]) return sendError(res, 'NOT_FOUND', 'Task not found', {}, 404)
+
+    return sendSuccess(res, { id: result.rows[0].id, deleted: true })
+  } catch (_error) {
+    return sendError(res, 'SERVER_ERROR', 'Failed to delete task', {}, 500)
   }
 }
