@@ -5,7 +5,7 @@ import Select from '../../components/common/Select.jsx'
 import { PERMISSIONS, hasPermission } from '../../constants/rbac.js'
 import { tasksByColumn } from '../../constants/tasks.js'
 import { getEmployees, getEmployeeStress, getStressSuggestions, getTeamEmployees } from '../../services/employeeService.js'
-import { createTask, getTasks, updateTask } from '../../services/taskService.js'
+import { createTask, deleteTask, getTasks, updateTask } from '../../services/taskService.js'
 
 const columns = [
   { key: 'backlog', label: 'Backlog' },
@@ -138,6 +138,20 @@ function Tasks({ token = '', user }) {
       return next
     })
     setDragging(null)
+  }
+
+  const handleDeleteTask = async (task, columnKey) => {
+    if (!window.confirm(`Delete task "${task.title}"?`)) return
+    try {
+      await deleteTask(task.id, token)
+      setBoard((prev) => ({
+        ...prev,
+        [columnKey]: prev[columnKey].filter((t) => t.id !== task.id),
+      }))
+      setNotice('Task deleted.')
+    } catch (error) {
+      setNotice(error.message || 'Failed to delete task.')
+    }
   }
 
   const handleCreateTask = async () => {
@@ -314,7 +328,19 @@ function Tasks({ token = '', user }) {
                   draggable
                   onDragStart={() => setDragging({ task, columnKey: column.key })}
                 >
-                  <div className="task-title">{task.title}</div>
+                  <div className="task-card-header">
+                    <div className="task-title">{task.title}</div>
+                    {canAssign && (
+                      <button
+                        type="button"
+                        className="task-delete-btn"
+                        aria-label={`Delete task: ${task.title}`}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteTask(task, column.key) }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                   <div className="task-meta">
                     <span>{task.assignee}</span>
                     <span>Due {task.due}</span>

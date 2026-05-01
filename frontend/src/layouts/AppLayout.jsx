@@ -2,7 +2,7 @@ import { useState } from 'react'
 import Sidebar from '../components/layout/Sidebar.jsx'
 import TopNav from '../components/layout/TopNav.jsx'
 
-function AppLayout({ children, activePage, onNavigate, role, pageMeta, user, token = '', onLogout }) {
+function AppLayout({ children, activePage, onNavigate, role, pageMeta, user, onLogout }) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -20,7 +20,6 @@ function AppLayout({ children, activePage, onNavigate, role, pageMeta, user, tok
           title={pageMeta?.title}
           subtitle={pageMeta?.subtitle}
           user={user}
-          token={token}
           onLogout={onLogout}
         />
         <div className="app-content">
