@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import rateLimit from 'express-rate-limit'
 import { login, me, signup } from '../controllers/authController.js'
 import { authMiddleware } from '../middleware/authMiddleware.js'
 import { validateRequest } from '../middleware/validateRequest.js'
@@ -12,6 +13,15 @@ import { loginSchema, signupSchema } from '../validators/authValidators.js'
  */
 
 const router = Router()
+
+// Auth routes are rate-limited to prevent brute-force attacks
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_REQUESTS', message: 'Too many auth requests. Please wait and try again.' },
+})
 
 /**
  * @openapi
@@ -37,7 +47,7 @@ const router = Router()
  *       201: { description: Account created, JWT returned }
  *       400: { description: Validation error }
  */
-router.post('/signup', validateRequest(signupSchema), signup)
+router.post('/signup', authLimiter, validateRequest(signupSchema), signup)
 
 /**
  * @openapi
@@ -60,7 +70,7 @@ router.post('/signup', validateRequest(signupSchema), signup)
  *       200: { description: JWT token }
  *       401: { description: Invalid credentials }
  */
-router.post('/login', validateRequest(loginSchema), login)
+router.post('/login', authLimiter, validateRequest(loginSchema), login)
 
 /**
  * @openapi

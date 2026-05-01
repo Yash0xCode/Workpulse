@@ -32,6 +32,14 @@ const mlLimiter = rateLimit({
   message: { error: 'TOO_MANY_REQUESTS', message: 'Too many requests, please try again later.' },
 })
 
+const stdLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_REQUESTS', message: 'Too many requests, please try again later.' },
+})
+
 /**
  * @openapi
  * /employees:
@@ -51,7 +59,7 @@ const mlLimiter = rateLimit({
  *     responses:
  *       200: { description: Paginated employee list }
  */
-router.get('/', requirePermission(PERMISSIONS.VIEW_EMPLOYEES), getEmployees)
+router.get('/', requirePermission(PERMISSIONS.VIEW_EMPLOYEES), stdLimiter, getEmployees)
 router.get('/stress/suggestions', requirePermission(PERMISSIONS.VIEW_EMPLOYEES), mlLimiter, getStressSuggestions)
 
 /**
@@ -63,8 +71,8 @@ router.get('/stress/suggestions', requirePermission(PERMISSIONS.VIEW_EMPLOYEES),
  *     responses:
  *       201: { description: Employee created }
  */
-router.post('/', requirePermission(PERMISSIONS.ADD_EMPLOYEE), validateRequest(createEmployeeSchema), createEmployee)
-router.get('/:id', requirePermission(PERMISSIONS.VIEW_EMPLOYEES), getEmployeeById)
+router.post('/', requirePermission(PERMISSIONS.ADD_EMPLOYEE), stdLimiter, validateRequest(createEmployeeSchema), createEmployee)
+router.get('/:id', requirePermission(PERMISSIONS.VIEW_EMPLOYEES), stdLimiter, getEmployeeById)
 router.get('/:id/stress', requirePermission(PERMISSIONS.VIEW_EMPLOYEES), mlLimiter, getEmployeeStress)
 router.post('/:id/face-register', requirePermission(PERMISSIONS.EDIT_EMPLOYEE), mlLimiter, registerFace)
 
@@ -82,7 +90,7 @@ router.post('/:id/face-register', requirePermission(PERMISSIONS.EDIT_EMPLOYEE), 
  *     responses:
  *       200: { description: Updated employee }
  */
-router.put('/:id', requirePermission(PERMISSIONS.EDIT_EMPLOYEE), validateRequest(updateEmployeeSchema), updateEmployee)
-router.delete('/:id', requirePermission(PERMISSIONS.DELETE_EMPLOYEE), deleteEmployee)
+router.put('/:id', requirePermission(PERMISSIONS.EDIT_EMPLOYEE), stdLimiter, validateRequest(updateEmployeeSchema), updateEmployee)
+router.delete('/:id', requirePermission(PERMISSIONS.DELETE_EMPLOYEE), stdLimiter, deleteEmployee)
 
 export default router

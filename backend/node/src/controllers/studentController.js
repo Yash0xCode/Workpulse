@@ -44,7 +44,7 @@ export const getStudents = async (req, res) => {
     )
 
     const countResult = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM students s WHERE ${filters.slice(0, -0).join(' AND ')}`,
+      `SELECT COUNT(*)::int AS total FROM students s WHERE ${filters.join(' AND ')}`,
       params.slice(0, -2)
     )
 

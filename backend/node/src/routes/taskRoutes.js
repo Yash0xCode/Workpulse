@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import rateLimit from 'express-rate-limit'
 import { PERMISSIONS } from '../config/rbac.js'
 import { createTask, deleteTask, getTasks, updateTask } from '../controllers/taskController.js'
 import { requirePermission } from '../middleware/permissionMiddleware.js'
@@ -14,6 +15,14 @@ import { createTaskSchema, updateTaskSchema } from '../validators/taskValidators
 
 const router = Router()
 
+const taskLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_REQUESTS', message: 'Too many requests, please try again later.' },
+})
+
 /**
  * @openapi
  * /tasks:
@@ -27,7 +36,7 @@ const router = Router()
  *     responses:
  *       200: { description: Task list }
  */
-router.get('/', getTasks)
+router.get('/', taskLimiter, getTasks)
 
 /**
  * @openapi
@@ -35,22 +44,10 @@ router.get('/', getTasks)
  *   post:
  *     tags: [Tasks]
  *     summary: Create a task
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [title]
- *             properties:
- *               title: { type: string }
- *               priority: { type: string }
- *               assignee: { type: string }
- *               dueDate: { type: string, format: date }
  *     responses:
  *       201: { description: Task created }
  */
-router.post('/', requirePermission(PERMISSIONS.ASSIGN_TASK), validateRequest(createTaskSchema), createTask)
+router.post('/', taskLimiter, requirePermission(PERMISSIONS.ASSIGN_TASK), validateRequest(createTaskSchema), createTask)
 
 /**
  * @openapi
@@ -66,7 +63,7 @@ router.post('/', requirePermission(PERMISSIONS.ASSIGN_TASK), validateRequest(cre
  *     responses:
  *       200: { description: Updated task }
  */
-router.put('/:id', requirePermission(PERMISSIONS.ASSIGN_TASK), validateRequest(updateTaskSchema), updateTask)
+router.put('/:id', taskLimiter, requirePermission(PERMISSIONS.ASSIGN_TASK), validateRequest(updateTaskSchema), updateTask)
 
 /**
  * @openapi
@@ -82,6 +79,6 @@ router.put('/:id', requirePermission(PERMISSIONS.ASSIGN_TASK), validateRequest(u
  *     responses:
  *       200: { description: Task deleted }
  */
-router.delete('/:id', requirePermission(PERMISSIONS.ASSIGN_TASK), deleteTask)
+router.delete('/:id', taskLimiter, requirePermission(PERMISSIONS.ASSIGN_TASK), deleteTask)
 
 export default router

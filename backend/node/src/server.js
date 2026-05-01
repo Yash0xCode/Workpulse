@@ -1,6 +1,7 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { pool } from './config/db.js';
 import { swaggerSpec } from './config/swagger.js';
@@ -21,22 +22,34 @@ app.use(express.json());
 app.use(paginationMiddleware);
 app.use(sortingMiddleware);
 
+// ── General API rate limiter ─────────────────────────────────────────────────
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_REQUESTS', message: 'Too many requests, please try again later.' },
+});
+app.use('/api', generalLimiter);
+
 // ── API documentation ────────────────────────────────────────────────────────
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));
 app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 
 // ── Health checks ────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => {
-res.json({ status: 'ok', service: 'workpulse-node-api' });
+const healthLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
+
+app.get('/health', healthLimiter, (_req, res) => {
+  res.json({ status: 'ok', service: 'workpulse-node-api' });
 });
 
-app.get('/health/db', async (_req, res) => {
-try {
-await pool.query('SELECT 1 AS ok');
-res.json({ status: 'ok', database: process.env.DB_NAME || 'workpulse_db', timestamp: new Date().toISOString() });
-} catch (_error) {
-res.status(500).json({ status: 'error', database: 'disconnected' });
-}
+app.get('/health/db', healthLimiter, async (_req, res) => {
+  try {
+    await pool.query('SELECT 1 AS ok');
+    res.json({ status: 'ok', database: process.env.DB_NAME || 'workpulse_db', timestamp: new Date().toISOString() });
+  } catch (_error) {
+    res.status(500).json({ status: 'error', database: 'disconnected' });
+  }
 });
 
 // ── Public routes (no auth required) ────────────────────────────────────────
